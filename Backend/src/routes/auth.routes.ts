@@ -35,7 +35,8 @@ authRoutes.post(
   "/login",
   rateLimit("login", 40),
   // Per-account cap so rotating IPs cannot brute-force a single password.
-  rateLimit("login-account", 10, { windowMs: FIFTEEN_MINUTES, keyBy: byBodyEmail }),
+  // Counts failed attempts only and resets on success, so real sign-ins never trip it.
+  rateLimit("login-account", 10, { windowMs: FIFTEEN_MINUTES, keyBy: byBodyEmail, failuresOnly: true }),
   (req, res) => void authController.login(req, res),
 );
 authRoutes.post("/register", rateLimit("register", 20), (req, res) => void authController.register(req, res));

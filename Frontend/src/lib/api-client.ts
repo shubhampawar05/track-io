@@ -3,6 +3,20 @@ import { useOrganizationStore } from "@/stores/useOrganizationStore";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
+/**
+ * Called whenever the API answers 401 (session expired or revoked, e.g. logout on another device).
+ * Registered by the auth store so this module does not import it (avoids a circular import).
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+function noteStatus(status: number): void {
+  if (status === 401) unauthorizedHandler?.();
+}
+
 function apiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/$/, "");
@@ -47,6 +61,7 @@ export async function apiJson<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  noteStatus(res.status);
   const payload = (await res.json()) as ApiResponse<T>;
   return payload;
 }
@@ -68,6 +83,7 @@ export async function apiJsonWithStatus<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  noteStatus(res.status);
   const payload = (await res.json()) as ApiResponse<T>;
   return { status: res.status, payload };
 }
@@ -87,6 +103,7 @@ export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResul
       return fd;
     })(),
   });
+  noteStatus(res.status);
   return (await res.json()) as ApiResponse<UploadResult>;
 }
 
@@ -99,6 +116,7 @@ export async function apiUploadForm<T>(path: string, formData: FormData): Promis
     headers: orgHeader,
     body: formData,
   });
+  noteStatus(res.status);
   return (await res.json()) as ApiResponse<T>;
 }
 

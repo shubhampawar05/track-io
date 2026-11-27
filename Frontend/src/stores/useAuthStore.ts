@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { apiJson } from "@/lib/api-client";
+import { apiJson, setUnauthorizedHandler } from "@/lib/api-client";
 import { clearPipelineFilters } from "@/hooks/useIssuesList";
 import { readLastOrganizationId } from "@/lib/last-organization";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
@@ -142,4 +142,18 @@ export const useAuthStore = create<AuthState>((set, get) => {
     }
   },
 };
+});
+
+/**
+ * A 401 while signed in means the session expired or was revoked (logout / password reset on
+ * another device). Do a full navigation to the sign-in page: it drops every in-memory cache
+ * (queries, filters, recording session) so nothing from this session leaks to the next user.
+ */
+let redirectingForExpiredSession = false;
+setUnauthorizedHandler(() => {
+  if (typeof window === "undefined" || redirectingForExpiredSession) return;
+  if (!useAuthStore.getState().user) return;
+  redirectingForExpiredSession = true;
+  const here = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/?next=${encodeURIComponent(here)}`);
 });

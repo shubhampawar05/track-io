@@ -120,6 +120,7 @@ export function NewProjectModal({
                       if (!ok) return;
                       setName("");
                       setDescription("");
+                      setColor("bg-indigo-500");
                       onClose();
                     } finally {
                       setBusy(false);

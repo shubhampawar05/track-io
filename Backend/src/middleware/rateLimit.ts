@@ -31,6 +31,11 @@ export type RateLimitOptions = {
   windowMs?: number;
   /** Custom key (e.g. account email). Return null to skip this limiter for the request. */
   keyBy?: (req: Request) => string | null;
+  /**
+   * Count only failed requests (status >= 400, except 429) and reset the bucket after a
+   * success. Used for per-account login throttling so real sign-ins never lock a user out.
+   */
+  failuresOnly?: boolean;
 };
 
 /** Simple fixed-window rate limiter (in-memory; per process — use a shared store when scaling out). */
@@ -50,15 +55,32 @@ export function rateLimit(prefix: string, maxPerWindow = DEFAULT_MAX, options: R
       b = { count: 0, windowStart: now, windowMs };
       buckets.set(key, b);
     }
-    b.count += 1;
-    if (b.count > maxPerWindow) {
-      const retryAfterSec = Math.ceil((b.windowStart + b.windowMs - now) / 1000);
-      res.setHeader("Retry-After", String(Math.max(retryAfterSec, 1)));
-      res.status(429).json(fail("Too many requests. Try again later."));
+    const bucket = b;
+    if (options.failuresOnly) {
+      if (bucket.count >= maxPerWindow) {
+        reject(res, bucket, now);
+        return;
+      }
+      res.on("finish", () => {
+        if (res.statusCode < 400) buckets.delete(key);
+        else if (res.statusCode !== 429) bucket.count += 1;
+      });
+      next();
+      return;
+    }
+    bucket.count += 1;
+    if (bucket.count > maxPerWindow) {
+      reject(res, bucket, now);
       return;
     }
     next();
   };
+}
+
+function reject(res: Response, b: Bucket, now: number) {
+  const retryAfterSec = Math.ceil((b.windowStart + b.windowMs - now) / 1000);
+  res.setHeader("Retry-After", String(Math.max(retryAfterSec, 1)));
+  res.status(429).json(fail("Too many requests. Try again later."));
 }
 
 /** Keys a limiter on the normalized `email` field of a JSON body (per-account throttling). */
