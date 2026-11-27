@@ -1,14 +1,35 @@
 import "dotenv/config";
 
 const DEV_JWT_FALLBACK = "dev-only-jwt-secret-min-32-chars!!";
+const MIN_JWT_SECRET_LENGTH = 32;
+
+/** Publicly known values (source code / .env.example) that must never sign real sessions. */
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  DEV_JWT_FALLBACK,
+  "change-me-in-production-min-32-chars",
+]);
+
+/** Only an explicit local environment may fall back to an insecure secret. */
+function isLocalDevEnvironment(): boolean {
+  const nodeEnv = process.env.NODE_ENV?.trim();
+  return nodeEnv === "development" || nodeEnv === "test";
+}
 
 function resolveJwtSecret(): string {
-  const s = process.env.JWT_SECRET?.trim();
-  if (s && s.length >= 16) return s;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET must be set and at least 16 characters in production");
+  const s = process.env.JWT_SECRET?.trim() ?? "";
+  const isStrong = s.length >= MIN_JWT_SECRET_LENGTH && !KNOWN_PLACEHOLDER_SECRETS.has(s);
+  if (isStrong) return s;
+  if (!isLocalDevEnvironment()) {
+    throw new Error(
+      `JWT_SECRET must be a random value of at least ${MIN_JWT_SECRET_LENGTH} characters and not a placeholder ` +
+        `(NODE_ENV=${process.env.NODE_ENV ?? "unset"}). Generate one with: openssl rand -base64 48`,
+    );
   }
-  return DEV_JWT_FALLBACK;
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[env] JWT_SECRET is missing, short or a placeholder — using an insecure dev secret. Never deploy like this.",
+  );
+  return s.length >= 16 ? s : DEV_JWT_FALLBACK;
 }
 
 function resolveGithubEncryptionKey(): string {

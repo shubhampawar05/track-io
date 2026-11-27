@@ -56,7 +56,7 @@ function buildGithubAuthorizeUrl(organizationId: mongoose.Types.ObjectId): strin
   const state = jwt.sign(
     { organizationId: orgStr, purpose: STATE_PURPOSE } satisfies StatePayload,
     env.JWT_SECRET,
-    { expiresIn: "10m" },
+    { algorithm: "HS256", expiresIn: "10m" },
   );
   const u = new URL(GITHUB_AUTH_URL);
   u.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
@@ -78,7 +78,7 @@ export async function getGithubOauthUrl(
 function parseState(state: string): mongoose.Types.ObjectId {
   let decoded: jwt.JwtPayload;
   try {
-    decoded = jwt.verify(state, env.JWT_SECRET) as jwt.JwtPayload;
+    decoded = jwt.verify(state, env.JWT_SECRET, { algorithms: ["HS256"] }) as jwt.JwtPayload;
   } catch {
     throw new HttpError(400, "Invalid OAuth state");
   }

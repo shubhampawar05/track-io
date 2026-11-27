@@ -80,6 +80,12 @@ Removes all documents from the Trackio collections (`User`, `Organization`, `Mem
 npm run db:reset
 ```
 
+> **Safety guard:** `db:reset` and `seed` always refuse when `NODE_ENV=production`, and refuse any non-local MongoDB (e.g. Atlas) unless you name the database explicitly:
+>
+> ```bash
+> npm run db:reset -- --allow-remote=trackio
+> ```
+
 ### Seed demo data (optional, first-time)
 
 Creates a full demo workspace: members (including an **admin**), custom board columns, sprints, issues (all statuses and priorities, subtasks with links, attachments, GitHub links), comments, pending/cancelled invites, transcription rows, GitHub OAuth row (placeholder token), and org webhook URL fields. The script prints the **webhook URL** and **pending invite token** to the console when it finishes.

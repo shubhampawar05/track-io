@@ -6,7 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
     "db:reset": "tsx src/scripts/reset-db.ts",
@@ -23,9 +23,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.5",
-    "swagger-ui-express": "^5.0.1",
-    "openai": "^6.34.0"
+    "nodemailer": "^10.6.1",
+    "openai": "^6.34.0",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

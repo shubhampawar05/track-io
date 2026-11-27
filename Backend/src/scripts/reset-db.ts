@@ -4,6 +4,7 @@
  */
 import "dotenv/config";
 import mongoose from "mongoose";
+import { assertSafeDatabaseTarget } from "./dbGuard";
 import { Comment } from "../models/Comment";
 import { GithubIntegration } from "../models/GithubIntegration";
 import { Issue } from "../models/Issue";
@@ -22,6 +23,8 @@ if (!rawUri) {
   );
   process.exit(1);
 }
+
+assertSafeDatabaseTarget(rawUri as string, "db:reset");
 
 async function main() {
   await mongoose.connect(rawUri as string);
