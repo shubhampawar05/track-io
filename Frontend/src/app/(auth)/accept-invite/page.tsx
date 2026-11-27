@@ -7,10 +7,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Users } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
-import { invalidateOrganizationScopedQueries } from "@/lib/invalidate-org-queries";
+import {
+  invalidateOrganizationScopedQueries,
+  switchActiveOrganization,
+} from "@/lib/invalidate-org-queries";
 import { writeLastOrganizationId } from "@/lib/last-organization";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { AppLoadingSkeleton } from "@/components/layout/AppLoadingSkeleton";
 
 function roleSentence(role: string): string {
@@ -78,10 +80,9 @@ function AcceptInviteContent() {
         setError(r.error);
         return;
       }
-      useOrganizationStore.getState().setOrganizationId(r.data.organizationId);
       if (user) writeLastOrganizationId(user.id, r.data.organizationId);
+      await switchActiveOrganization(queryClient, r.data.organizationId);
       await hydrate({ force: true });
-      invalidateOrganizationScopedQueries(queryClient);
       router.replace("/issues/board");
     } finally {
       setBusy(false);

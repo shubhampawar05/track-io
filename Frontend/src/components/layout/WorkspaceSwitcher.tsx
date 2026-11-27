@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { invalidateOrganizationScopedQueries } from "@/lib/invalidate-org-queries";
+import { switchActiveOrganization } from "@/lib/invalidate-org-queries";
 import { writeLastOrganizationId } from "@/lib/last-organization";
 import {
   propertyRowClass,
@@ -32,7 +32,6 @@ export function WorkspaceSwitcher() {
   const user = useAuthStore((s) => s.user);
   const organizations = useAuthStore((s) => s.organizations);
   const organizationId = useOrganizationStore((s) => s.organizationId);
-  const setOrganizationId = useOrganizationStore((s) => s.setOrganizationId);
 
   if (!user) return null;
 
@@ -81,10 +80,9 @@ export function WorkspaceSwitcher() {
         modal={false}
         value={resolvedId}
         onValueChange={(id) => {
-          if (!id) return;
-          setOrganizationId(id);
+          if (!id || id === organizationId) return;
           writeLastOrganizationId(user.id, id);
-          invalidateOrganizationScopedQueries(queryClient);
+          void switchActiveOrganization(queryClient, id);
         }}
       >
         <SelectTrigger

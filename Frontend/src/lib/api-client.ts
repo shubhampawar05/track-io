@@ -3,6 +3,20 @@ import { useOrganizationStore } from "@/stores/useOrganizationStore";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
+/**
+ * Called whenever the API answers 401 (session expired or revoked, e.g. logout on another device).
+ * Registered by the auth store so this module does not import it (avoids a circular import).
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+function noteStatus(status: number): void {
+  if (status === 401) unauthorizedHandler?.();
+}
+
 function apiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/$/, "");
@@ -15,16 +29,28 @@ function resolveUrl(path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export type ApiJsonInit = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  /**
+   * Organization to scope the request to. When provided (including `null`), overrides the
+   * active organization from the store — org-scoped queries pass the id from their query key
+   * so a workspace switch can never cache org B's data under org A's key.
+   */
+  orgId?: string | null;
+};
+
+function organizationHeader(explicit?: string | null): Record<string, string> {
+  const orgId =
+    explicit !== undefined ? explicit : useOrganizationStore.getState().organizationId;
+  return typeof orgId === "string" && orgId.length > 0 ? { "X-Organization-Id": orgId } : {};
+}
+
 export async function apiJson<T>(
   path: string,
-  init?: Omit<RequestInit, "body"> & { body?: unknown },
+  init?: ApiJsonInit,
 ): Promise<ApiResponse<T>> {
-  const { body, headers, ...rest } = init ?? {};
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const { body, headers, orgId, ...rest } = init ?? {};
+  const orgHeader = organizationHeader(orgId);
   const res = await fetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
@@ -35,6 +61,7 @@ export async function apiJson<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  noteStatus(res.status);
   const payload = (await res.json()) as ApiResponse<T>;
   return payload;
 }
@@ -42,14 +69,10 @@ export async function apiJson<T>(
 /** Same as `apiJson` but includes HTTP status for callers that must distinguish 401 vs 404. */
 export async function apiJsonWithStatus<T>(
   path: string,
-  init?: Omit<RequestInit, "body"> & { body?: unknown },
+  init?: ApiJsonInit,
 ): Promise<{ status: number; payload: ApiResponse<T> }> {
-  const { body, headers, ...rest } = init ?? {};
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const { body, headers, orgId, ...rest } = init ?? {};
+  const orgHeader = organizationHeader(orgId);
   const res = await fetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
@@ -60,6 +83,7 @@ export async function apiJsonWithStatus<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  noteStatus(res.status);
   const payload = (await res.json()) as ApiResponse<T>;
   return { status: res.status, payload };
 }
@@ -68,11 +92,7 @@ export type UploadResult = { url: string; filename: string; size: number; mimeTy
 
 /** Multipart upload to POST /api/uploads (cookie + org header). */
 export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResult>> {
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const orgHeader = organizationHeader();
   const res = await fetch(resolveUrl("/api/uploads"), {
     method: "POST",
     credentials: "include",
@@ -83,22 +103,20 @@ export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResul
       return fd;
     })(),
   });
+  noteStatus(res.status);
   return (await res.json()) as ApiResponse<UploadResult>;
 }
 
 /** Multipart upload helper for custom endpoint paths. */
 export async function apiUploadForm<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const orgHeader = organizationHeader();
   const res = await fetch(resolveUrl(path), {
     method: "POST",
     credentials: "include",
     headers: orgHeader,
     body: formData,
   });
+  noteStatus(res.status);
   return (await res.json()) as ApiResponse<T>;
 }
 

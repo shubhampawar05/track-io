@@ -157,35 +157,42 @@ export function formatAssigneeFilterChipLabel(
   return membersById.get(value) ?? "Member";
 }
 
-/** `null` = all issues. `""` = skip fetch (e.g. parent still resolving project). */
+/**
+ * `null` = all issues. `""` = skip fetch (e.g. parent still resolving project).
+ * `assignedToMe` filters server-side by the signed-in user (`assignee=me`); it ignores pipeline filters.
+ */
 export function useIssuesList(
   projectSlug: string | null | undefined,
-  opts?: { applyPipelineFilters?: boolean },
+  opts?: { applyPipelineFilters?: boolean; assignedToMe?: boolean },
 ) {
   const organizationId = useOrganizationStore((s) => s.organizationId);
   const queryClient = useQueryClient();
-  const applyPipelineFilters = Boolean(opts?.applyPipelineFilters);
+  const assignedToMe = Boolean(opts?.assignedToMe);
+  const applyPipelineFilters = !assignedToMe && Boolean(opts?.applyPipelineFilters);
   const { applied } = usePipelineFilterStore();
 
   const slugKey = projectSlug === "" ? "__skip__" : projectSlug == null ? "__all__" : projectSlug;
-  const pipelineKey = applyPipelineFilters
-    ? serializeAppliedForQueryKey(applied)
-    : "__no_pipeline_filters__";
+  const pipelineKey = assignedToMe
+    ? "__assignee_me__"
+    : applyPipelineFilters
+      ? serializeAppliedForQueryKey(applied)
+      : "__no_pipeline_filters__";
 
   const query = useQuery({
     queryKey: ["issues", organizationId, slugKey, pipelineKey],
     enabled: Boolean(organizationId) && projectSlug !== "",
     ...orgIssuesQueryOptions(),
-    queryFn: async () => {
-      const q =
-        applyPipelineFilters && countAppliedPipelineFilters(applied) > 0
+    queryFn: async ({ queryKey }) => {
+      const q = assignedToMe
+        ? "?assignee=me"
+        : applyPipelineFilters && countAppliedPipelineFilters(applied) > 0
           ? buildIssuesListQueryString(applied)
           : "";
       const path =
         projectSlug != null
           ? `/api/projects/${encodeURIComponent(projectSlug)}/issues${q}`
           : `/api/issues${q}`;
-      const r = await apiJson<Issue[]>(path);
+      const r = await apiJson<Issue[]>(path, { orgId: queryKey[1] });
       if (!r.success) throw new Error(r.error);
       return r.data;
     },

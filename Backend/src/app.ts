@@ -20,6 +20,8 @@ import swaggerUi from "swagger-ui-express";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  // Only trust X-Forwarded-For from known proxies, otherwise req.ip (rate limiting) is spoofable.
+  app.set("trust proxy", env.TRUST_PROXY);
   app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
   app.post(
     "/api/integrations/github/webhook/:webhookPathToken",

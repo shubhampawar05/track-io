@@ -10,8 +10,8 @@ export function useProjectsList() {
   const query = useQuery({
     queryKey: ["projects", organizationId],
     enabled: Boolean(organizationId),
-    queryFn: async () => {
-      const r = await apiJson<ProjectCard[]>("/api/projects");
+    queryFn: async ({ queryKey }) => {
+      const r = await apiJson<ProjectCard[]>("/api/projects", { orgId: queryKey[1] });
       if (!r.success) throw new Error(r.error);
       return r.data;
     },

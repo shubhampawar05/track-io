@@ -65,10 +65,14 @@ export function DashboardOverlays() {
           const r = await apiJson<{ id: string }>("/api/issues", {
             method: "POST",
             body,
-          });
+          }).catch(() => null);
+          if (!r) {
+            showToast("Could not create issue. Check your connection and try again.", "error");
+            return false;
+          }
           if (!r.success) {
             showToast(r.error, "error");
-            return;
+            return false;
           }
           void queryClient.invalidateQueries({ queryKey: ["issues"] });
           void queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -79,6 +83,7 @@ export function DashboardOverlays() {
             });
           }
           showToast("Issue created successfully");
+          return true;
         }}
       />
       <ExtractTasksModal
@@ -98,13 +103,18 @@ export function DashboardOverlays() {
           const r = await apiJson("/api/projects", {
             method: "POST",
             body: { name },
-          });
+          }).catch(() => null);
+          if (!r) {
+            showToast("Could not create project. Check your connection and try again.", "error");
+            return false;
+          }
           if (!r.success) {
             showToast(r.error, "error");
-            return;
+            return false;
           }
           void queryClient.invalidateQueries({ queryKey: ["projects"] });
           showToast(`Project "${name}" created successfully`);
+          return true;
         }}
       />
       <InviteMemberModal

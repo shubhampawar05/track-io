@@ -65,9 +65,10 @@ export function FilterPanelScrollContent({
   const issuesBoardColsQuery = useQuery({
     queryKey: ["issuesBoardColumns", organizationId],
     enabled: Boolean(isOpen && organizationId),
-    queryFn: async () => {
+    queryFn: async ({ queryKey }) => {
       const r = await apiJson<{ columns: BoardColumnDto[] }>(
         "/api/organizations/issues-board-columns",
+        { orgId: queryKey[1] },
       );
       if (!r.success) throw new Error(r.error);
       return r.data.columns;

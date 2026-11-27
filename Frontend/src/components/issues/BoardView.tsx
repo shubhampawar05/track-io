@@ -39,6 +39,7 @@ import {
   type BoardReorderEntry,
 } from "@/lib/issue-board-sort";
 import { apiJson } from "@/lib/api-client";
+import { projectDetailQueryKey } from "@/hooks/useProjectDetail";
 import {
   PROTECTED_BOARD_STATUSES,
   slugifyColumnTitle,
@@ -108,16 +109,19 @@ export function BoardView({
       ? ["issuesBoardColumns", organizationId]
       : ["projectBoardColumns", organizationId, boardScope],
     enabled: Boolean(organizationId) && (isGlobalBoard || Boolean(boardScope)),
-    queryFn: async () => {
+    queryFn: async ({ queryKey }) => {
+      const orgId = queryKey[1] as string | null;
       if (isGlobalBoard) {
         const r = await apiJson<{ columns: BoardColumnConfig[] }>(
           "/api/organizations/issues-board-columns",
+          { orgId },
         );
         if (!r.success) throw new Error(r.error);
         return r.data.columns;
       }
       const r = await apiJson<ProjectDetail>(
         `/api/projects/${encodeURIComponent(boardScope)}`,
+        { orgId },
       );
       if (!r.success) throw new Error(r.error);
       return r.data.boardColumns;
@@ -148,7 +152,7 @@ export function BoardView({
         ["projectBoardColumns", organizationId, boardScope],
         data.boardColumns,
       );
-      queryClient.setQueryData(["project", organizationId, boardScope], data);
+      queryClient.setQueryData(projectDetailQueryKey(organizationId, boardScope), data);
       void queryClient.invalidateQueries({
         queryKey: ["issuesBoardColumns", organizationId],
       });

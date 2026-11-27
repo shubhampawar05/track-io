@@ -8,6 +8,8 @@ const userSchema = new Schema(
     initials: { type: String, required: true },
     passwordResetTokenHash: { type: String, default: null },
     passwordResetExpiresAt: { type: Date, default: null },
+    /** Embedded in session JWTs; bumping it revokes every existing session (logout, password reset). */
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

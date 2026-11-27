@@ -22,9 +22,11 @@ export function NewProjectModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (name: string) => void;
+  /** Resolves `true` on success; on `false` the modal stays open with the form intact. */
+  onAdd: (name: string) => Promise<boolean>;
 }) {
   const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("bg-indigo-500");
 
@@ -110,10 +112,22 @@ export function NewProjectModal({
               <button
                 type="button"
                 onClick={() => {
-                  onAdd(name);
-                  onClose();
+                  if (busy) return;
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      const ok = await onAdd(name);
+                      if (!ok) return;
+                      setName("");
+                      setDescription("");
+                      setColor("bg-indigo-500");
+                      onClose();
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
                 }}
-                disabled={!name}
+                disabled={!name || busy}
                 className="linear-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Create Project

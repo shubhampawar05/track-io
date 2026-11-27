@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
+import { useProjectDetail } from "@/hooks/useProjectDetail";
 import {
   dismissNewIssueGuide,
   isNewIssueGuideDismissed,
@@ -21,7 +22,6 @@ import type {
   NewIssueCreatePayload,
   Priority,
   ProjectCard,
-  ProjectDetail,
   Status,
 } from "@/types/issue";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
@@ -95,7 +95,8 @@ export function NewIssueModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (payload: NewIssueCreatePayload) => Promise<void>;
+  /** Resolves `true` on success; on `false` the modal stays open with the form intact. */
+  onAdd: (payload: NewIssueCreatePayload) => Promise<boolean>;
   projectSlug: string | null;
   currentUserId: string | null;
 }) {
@@ -118,8 +119,8 @@ export function NewIssueModal({
   const projectsQuery = useQuery({
     queryKey: ["projects", organizationId],
     enabled: Boolean(isOpen && !projectSlug && organizationId),
-    queryFn: async () => {
-      const r = await apiJson<ProjectCard[]>("/api/projects");
+    queryFn: async ({ queryKey }) => {
+      const r = await apiJson<ProjectCard[]>("/api/projects", { orgId: queryKey[1] });
       if (!r.success) throw new Error(r.error);
       return r.data;
     },
@@ -137,22 +138,13 @@ export function NewIssueModal({
   const effectiveSlug = projectSlug ?? pickedProjectSlug;
 
   const {
-    data: projectApi,
+    data: projectData,
     isPending: projectLoading,
     isError: projectError,
-  } = useQuery({
-    queryKey: ["project", organizationId, effectiveSlug],
-    enabled: Boolean(isOpen && effectiveSlug && organizationId),
-    queryFn: async () => {
-      const r = await apiJson<ProjectDetail>(
-        `/api/projects/${encodeURIComponent(effectiveSlug!)}`,
-      );
-      return r;
-    },
-  });
+    error: projectLoadError,
+  } = useProjectDetail(effectiveSlug, { enabled: isOpen });
 
-  const project =
-    effectiveSlug && projectApi?.success === true ? projectApi.data : undefined;
+  const project = effectiveSlug ? projectData : undefined;
 
   useEffect(() => {
     if (!isOpen) {
@@ -229,12 +221,12 @@ export function NewIssueModal({
     !projectListEmpty &&
     !(
       Boolean(projectSlug) &&
-      (projectLoading || projectError || projectApi?.success === false)
+      (projectLoading || projectError)
     );
 
   const submitIssue = useCallback(async () => {
     if (!title.trim() || !effectiveSlug) return;
-    if (projectSlug && (!projectApi?.success || projectLoading)) return;
+    if (projectSlug && (!projectData || projectLoading)) return;
     if (
       !projectSlug &&
       (projectsLoading || projectsListError || !pickedProjectSlug)
@@ -254,7 +246,8 @@ export function NewIssueModal({
         projectSlug: projectSlug ?? effectiveSlug,
         ...(dueIso ? { dueDate: dueIso } : {}),
       };
-      await onAdd(payload);
+      const ok = await onAdd(payload);
+      if (!ok) return;
       setTitle("");
       setDescription("");
       setStatus("todo");
@@ -270,7 +263,7 @@ export function NewIssueModal({
     title,
     effectiveSlug,
     projectSlug,
-    projectApi,
+    projectData,
     projectLoading,
     projectsLoading,
     projectsListError,
@@ -310,8 +303,8 @@ export function NewIssueModal({
     ? "Could not load projects. Try again or refresh."
     : projectListEmpty
       ? "Create a project before adding issues."
-      : projectSlug && projectApi?.success === false
-        ? (projectApi.error ?? "Could not load project.")
+      : projectSlug && projectError
+        ? (projectLoadError?.message || "Could not load project.")
         : null;
 
   const dueDateParsed = useMemo(() => {

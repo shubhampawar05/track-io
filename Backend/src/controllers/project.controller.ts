@@ -3,6 +3,7 @@ import { HttpError } from "../middleware/errorHandler";
 import * as projectService from "../services/project.service";
 import * as issueService from "../services/issue.service";
 import { fail, ok } from "../types/api";
+import { bodyObject, nullableString, optionalString } from "../utils/bodyFields";
 import { parseAndValidateBoardColumns } from "../utils/boardColumns";
 
 export async function list(req: Request, res: Response) {
@@ -114,23 +115,15 @@ export async function listIssues(req: Request, res: Response) {
 export async function createIssue(req: Request, res: Response) {
   try {
     const slug = decodeURIComponent(String(req.params.slug));
-    const body = req.body as {
-      title?: string;
-      description?: string;
-      status?: string;
-      priority?: string;
-      label?: string;
-      assigneeId?: string | null;
-      dueDate?: string | null;
-    };
+    const body = bodyObject(req.body);
     const data = await issueService.createIssueUnderProject(req.organizationId!, req.userId!, slug, {
-      title: String(body.title ?? ""),
-      description: body.description,
-      status: body.status,
-      priority: body.priority,
-      label: body.label,
-      assigneeId: body.assigneeId === null ? null : body.assigneeId,
-      dueDate: body.dueDate === null ? null : body.dueDate,
+      title: optionalString(body, "title") ?? "",
+      description: optionalString(body, "description"),
+      status: optionalString(body, "status"),
+      priority: optionalString(body, "priority"),
+      label: optionalString(body, "label"),
+      assigneeId: nullableString(body, "assigneeId"),
+      dueDate: nullableString(body, "dueDate"),
     });
     res.json(ok(data));
   } catch (e) {

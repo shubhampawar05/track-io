@@ -48,6 +48,19 @@ function resolveSmtpPort(): number {
   return Number.isFinite(n) ? n : 587;
 }
 
+/**
+ * Express `trust proxy` setting. Unset/"false" → trust nobody (req.ip = socket address).
+ * A number → trust that many hops (e.g. "1" behind one load balancer); otherwise passed as-is
+ * (e.g. "loopback", a subnet list).
+ */
+function resolveTrustProxy(): boolean | number | string {
+  const raw = process.env.TRUST_PROXY?.trim() ?? "";
+  if (!raw || raw.toLowerCase() === "false") return false;
+  if (raw.toLowerCase() === "true") return true;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : raw;
+}
+
 function parseFrontendOrigins(): string[] {
   const raw = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
   const origins = raw
@@ -73,6 +86,7 @@ export const env = {
   /** Base URL clients use to load uploaded files (e.g. http://localhost:4000). */
   API_PUBLIC_URL: process.env.API_PUBLIC_URL?.trim() || "",
   NODE_ENV: process.env.NODE_ENV ?? "development",
+  TRUST_PROXY: resolveTrustProxy(),
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID?.trim() ?? "",
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET?.trim() ?? "",
   GITHUB_OAUTH_CALLBACK_URL: process.env.GITHUB_OAUTH_CALLBACK_URL?.trim() ?? "",

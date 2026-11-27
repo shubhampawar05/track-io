@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Calendar,
   Layers,
@@ -25,6 +26,7 @@ function navClass(active: boolean) {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const logout = useAuthStore((s) => s.logout);
   const organizations = useAuthStore((s) => s.organizations);
   const organizationId = useOrganizationStore((s) => s.organizationId);
@@ -116,8 +118,18 @@ export function Sidebar() {
           className="linear-sidebar-item text-red-500 hover:bg-red-500/10"
           onClick={() => {
             void (async () => {
-              await logout();
-              showToast("Logged out successfully");
+              let ok = true;
+              try {
+                await logout();
+              } catch {
+                ok = false;
+              } finally {
+                queryClient.clear();
+              }
+              showToast(
+                ok ? "Logged out successfully" : "Signed out on this device; the server could not be reached",
+                ok ? "success" : "error",
+              );
               router.push("/");
             })();
           }}

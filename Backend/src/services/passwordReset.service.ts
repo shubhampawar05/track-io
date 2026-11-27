@@ -52,5 +52,7 @@ export async function resetPasswordWithToken(tokenRaw: string, newPassword: stri
   user.passwordHash = await bcrypt.hash(newPassword, 10);
   user.passwordResetTokenHash = null;
   user.passwordResetExpiresAt = null;
+  // Sign out every existing session: a reset usually means the old password may be compromised.
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
 }

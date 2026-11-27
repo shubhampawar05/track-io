@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { HttpError } from "../middleware/errorHandler";
 import * as issueService from "../services/issue.service";
+import { bodyObject, nullableString, optionalString } from "../utils/bodyFields";
 import { fail, ok } from "../types/api";
 
 export async function listAll(req: Request, res: Response) {
@@ -19,25 +20,16 @@ export async function listAll(req: Request, res: Response) {
 
 export async function createGlobal(req: Request, res: Response) {
   try {
-    const body = req.body as {
-      title?: string;
-      description?: string;
-      status?: string;
-      priority?: string;
-      label?: string;
-      projectSlug?: string | null;
-      assigneeId?: string | null;
-      dueDate?: string | null;
-    };
+    const body = bodyObject(req.body);
     const data = await issueService.createIssueGlobal(req.organizationId!, req.userId!, {
-      title: String(body.title ?? ""),
-      description: body.description,
-      status: body.status,
-      priority: body.priority,
-      label: body.label,
-      projectSlug: body.projectSlug ?? null,
-      assigneeId: body.assigneeId === null ? null : body.assigneeId,
-      dueDate: body.dueDate === null ? null : body.dueDate,
+      title: optionalString(body, "title") ?? "",
+      description: optionalString(body, "description"),
+      status: optionalString(body, "status"),
+      priority: optionalString(body, "priority"),
+      label: optionalString(body, "label"),
+      projectSlug: nullableString(body, "projectSlug") ?? null,
+      assigneeId: nullableString(body, "assigneeId"),
+      dueDate: nullableString(body, "dueDate"),
     });
     res.json(ok(data));
   } catch (e) {
