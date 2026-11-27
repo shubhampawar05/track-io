@@ -1,0 +1,12 @@
+.cursor/
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+uploads/
+.env*
+!.env.example
+backend/node_modules/
+frontend/node_modules/

@@ -1,0 +1,16 @@
+.cursor/
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+*.tsbuildinfo
+backups/
+.env*
+!.env.example
+Backend/node_modules/
+Frontend/node_modules/
+Backend/dist/
+Backend/uploads/
+docs
