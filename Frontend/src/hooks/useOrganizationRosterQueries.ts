@@ -13,7 +13,8 @@ export function useOrganizationMembersQuery() {
     queryKey: ["organization", "members", organizationId],
     enabled: Boolean(organizationId),
     ...orgMembersListQueryOptions(),
-    queryFn: async () => apiJson<OrganizationMember[]>("/api/organizations/members"),
+    queryFn: async ({ queryKey }) =>
+      apiJson<OrganizationMember[]>("/api/organizations/members", { orgId: queryKey[2] }),
   });
 }
 
@@ -27,6 +28,7 @@ export function useOrganizationInvitesQuery() {
     queryKey: ["organization", "invites", organizationId],
     enabled: Boolean(organizationId) && canManageInvites,
     ...orgInvitesListQueryOptions(),
-    queryFn: async () => apiJson<OrganizationInviteRow[]>("/api/organizations/invites"),
+    queryFn: async ({ queryKey }) =>
+      apiJson<OrganizationInviteRow[]>("/api/organizations/invites", { orgId: queryKey[2] }),
   });
 }

@@ -14,8 +14,8 @@ export type GithubWebhookSetupResponse = {
   secret: string;
 };
 
-export function fetchGithubIntegrationStatus() {
-  return apiJson<GithubIntegrationStatus>("/api/organizations/github/status");
+export function fetchGithubIntegrationStatus(orgId?: string | null) {
+  return apiJson<GithubIntegrationStatus>("/api/organizations/github/status", { orgId });
 }
 
 export function fetchGithubOauthUrl() {

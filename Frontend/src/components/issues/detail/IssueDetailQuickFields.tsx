@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { apiJson } from "@/lib/api-client";
+import { useProjectDetail } from "@/hooks/useProjectDetail";
 import {
   Select,
   SelectContent,
@@ -20,12 +20,10 @@ import {
 import type {
   IssueDetail,
   Priority,
-  ProjectDetail,
   ProjectMember,
   Status,
 } from "@/types/issue";
 import { useAuthStore } from "@/stores/useAuthStore";
-import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { cn } from "@/lib/utils";
 
@@ -52,21 +50,16 @@ export function IssueDetailQuickFields({
   onRefresh: () => Promise<void>;
   statusSelectOptions: { value: Status; label: string }[];
 }) {
-  const organizationId = useOrganizationStore((s) => s.organizationId);
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const showToast = useUIStore((s) => s.showToast);
   const [patching, setPatching] = useState(false);
   const slug = issue.projectSlug || issue.projectId || "";
 
-  const { data: projectApi } = useQuery({
-    queryKey: ["project", organizationId, slug],
-    enabled: Boolean(slug && organizationId),
-    queryFn: async () => apiJson<ProjectDetail>(`/api/projects/${encodeURIComponent(slug)}`),
-  });
+  const { data: projectData } = useProjectDetail(slug);
 
   const members = useMemo(
-    () => (projectApi?.success ? projectApi.data.members : []),
-    [projectApi],
+    () => projectData?.members ?? [],
+    [projectData],
   );
 
   const assigneeSelectMembers = useMemo(() => {
@@ -185,7 +178,7 @@ export function IssueDetailQuickFields({
 
       <Select
         modal={false}
-        disabled={patching || !slug || !projectApi?.success}
+        disabled={patching || !slug || !projectData}
         value={assigneeValue}
         onValueChange={(v) => {
           void patch(v === "" ? { assigneeId: null } : { assigneeId: v });

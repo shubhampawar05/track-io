@@ -15,16 +15,28 @@ function resolveUrl(path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export type ApiJsonInit = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  /**
+   * Organization to scope the request to. When provided (including `null`), overrides the
+   * active organization from the store — org-scoped queries pass the id from their query key
+   * so a workspace switch can never cache org B's data under org A's key.
+   */
+  orgId?: string | null;
+};
+
+function organizationHeader(explicit?: string | null): Record<string, string> {
+  const orgId =
+    explicit !== undefined ? explicit : useOrganizationStore.getState().organizationId;
+  return typeof orgId === "string" && orgId.length > 0 ? { "X-Organization-Id": orgId } : {};
+}
+
 export async function apiJson<T>(
   path: string,
-  init?: Omit<RequestInit, "body"> & { body?: unknown },
+  init?: ApiJsonInit,
 ): Promise<ApiResponse<T>> {
-  const { body, headers, ...rest } = init ?? {};
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const { body, headers, orgId, ...rest } = init ?? {};
+  const orgHeader = organizationHeader(orgId);
   const res = await fetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
@@ -42,14 +54,10 @@ export async function apiJson<T>(
 /** Same as `apiJson` but includes HTTP status for callers that must distinguish 401 vs 404. */
 export async function apiJsonWithStatus<T>(
   path: string,
-  init?: Omit<RequestInit, "body"> & { body?: unknown },
+  init?: ApiJsonInit,
 ): Promise<{ status: number; payload: ApiResponse<T> }> {
-  const { body, headers, ...rest } = init ?? {};
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const { body, headers, orgId, ...rest } = init ?? {};
+  const orgHeader = organizationHeader(orgId);
   const res = await fetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
@@ -68,11 +76,7 @@ export type UploadResult = { url: string; filename: string; size: number; mimeTy
 
 /** Multipart upload to POST /api/uploads (cookie + org header). */
 export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResult>> {
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const orgHeader = organizationHeader();
   const res = await fetch(resolveUrl("/api/uploads"), {
     method: "POST",
     credentials: "include",
@@ -88,11 +92,7 @@ export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResul
 
 /** Multipart upload helper for custom endpoint paths. */
 export async function apiUploadForm<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
-  const orgId = useOrganizationStore.getState().organizationId;
-  const orgHeader =
-    typeof orgId === "string" && orgId.length > 0
-      ? ({ "X-Organization-Id": orgId } as Record<string, string>)
-      : {};
+  const orgHeader = organizationHeader();
   const res = await fetch(resolveUrl(path), {
     method: "POST",
     credentials: "include",

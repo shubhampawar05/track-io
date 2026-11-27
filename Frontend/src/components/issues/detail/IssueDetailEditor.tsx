@@ -69,8 +69,8 @@ function IssueHeroActions({
       try {
         await onUpdateIssue();
         showToast("Issue updated");
-      } catch {
-        showToast("Update failed", "error");
+      } catch (e) {
+        showToast(e instanceof Error && e.message ? e.message : "Update failed", "error");
       } finally {
         updateBusy.current = false;
       }
@@ -140,9 +140,10 @@ export const IssueDetailEditor = forwardRef<
   const issuesBoardColsQuery = useQuery({
     queryKey: ["issuesBoardColumns", organizationId],
     enabled: Boolean(organizationId),
-    queryFn: async () => {
+    queryFn: async ({ queryKey }) => {
       const r = await apiJson<{ columns: BoardColumnDto[] }>(
         "/api/organizations/issues-board-columns",
+        { orgId: queryKey[1] },
       );
       if (!r.success) throw new Error(r.error);
       return r.data.columns;
@@ -179,19 +180,22 @@ export const IssueDetailEditor = forwardRef<
   const saveTitle = useCallback(async () => {
     const t = title.trim();
     if (!t || t === issue.title) return;
-    await apiJson(`/api/issues/${encodeURIComponent(issue.id)}`, {
+    const r = await apiJson(`/api/issues/${encodeURIComponent(issue.id)}`, {
       method: "PATCH",
       body: { title: t },
     });
+    if (!r.success) throw new Error(r.error || "Could not save title");
     await onRefresh();
   }, [issue.id, issue.title, onRefresh, title]);
 
+  /** Rejects on failure; IssueDescriptionEditor surfaces background save errors. */
   const saveDescription = useCallback(
     async (html: string) => {
-      await apiJson(`/api/issues/${encodeURIComponent(issue.id)}`, {
+      const r = await apiJson(`/api/issues/${encodeURIComponent(issue.id)}`, {
         method: "PATCH",
         body: { description: html },
       });
+      if (!r.success) throw new Error(r.error || "Could not save description");
       await onRefresh();
     },
     [issue.id, onRefresh],
@@ -252,7 +256,14 @@ export const IssueDetailEditor = forwardRef<
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => void saveTitle()}
+                onBlur={() => {
+                  saveTitle().catch((e: unknown) =>
+                    showToast(
+                      e instanceof Error && e.message ? e.message : "Could not save title",
+                      "error",
+                    ),
+                  );
+                }}
                 className="w-full bg-transparent text-2xl font-semibold tracking-tight text-[var(--text)] placeholder:text-linear-text-muted/50 focus:outline-none sm:text-[1.65rem] sm:leading-tight"
                 aria-label="Issue title"
               />

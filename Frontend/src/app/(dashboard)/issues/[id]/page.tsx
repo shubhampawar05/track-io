@@ -10,9 +10,9 @@ import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { IssueDetailSkeleton } from "@/components/issues/IssueDetailSkeleton";
 import { resolveIssueCloseHref } from "@/lib/issue-detail-from";
 
-async function loadIssueDetail(id: string): Promise<IssueDetail> {
+async function loadIssueDetail(id: string, orgId: string | null): Promise<IssueDetail> {
   const path = `/api/issues/${encodeURIComponent(id)}`;
-  const { status, payload: r } = await apiJsonWithStatus<IssueDetail>(path);
+  const { status, payload: r } = await apiJsonWithStatus<IssueDetail>(path, { orgId });
   if (!r.success) {
     if (status === 401) throw new Error("UNAUTHORIZED");
     if (status === 404) throw new Error("NOT_FOUND");
@@ -23,8 +23,9 @@ async function loadIssueDetail(id: string): Promise<IssueDetail> {
     await apiJson(path, {
       method: "PATCH",
       body: { unread: false },
+      orgId,
     });
-    const again = await apiJsonWithStatus<IssueDetail>(path);
+    const again = await apiJsonWithStatus<IssueDetail>(path, { orgId });
     if (again.payload.success) detail = { ...again.payload.data, githubLinks: again.payload.data.githubLinks ?? [] };
   }
   return detail;
@@ -56,7 +57,7 @@ function IssueDetailPageInner() {
   const query = useQuery({
     queryKey: ["issue", organizationId, id],
     enabled: Boolean(organizationId && id),
-    queryFn: () => loadIssueDetail(id),
+    queryFn: ({ queryKey }) => loadIssueDetail(id, queryKey[1]),
   });
 
   useEffect(() => {

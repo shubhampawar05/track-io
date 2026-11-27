@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { apiJson } from "@/lib/api-client";
+import { clearPipelineFilters } from "@/hooks/useIssuesList";
 import { readLastOrganizationId } from "@/lib/last-organization";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
+import { useRecordingSessionStore } from "@/stores/useRecordingSessionStore";
 
 export interface AuthUser {
   id: string;
@@ -128,10 +130,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
     applyAuthMe(r.data);
     return null;
   },
+  /** Always clears local session state, even if the server call fails. Callers clear the query cache. */
   logout: async () => {
-    useOrganizationStore.getState().setOrganizationId(null);
-    await apiJson("/api/auth/logout", { method: "POST" });
-    set({ user: null, organizations: [], hydrated: true });
+    useRecordingSessionStore.getState().discardSession();
+    try {
+      await apiJson("/api/auth/logout", { method: "POST" });
+    } finally {
+      useOrganizationStore.getState().setOrganizationId(null);
+      clearPipelineFilters();
+      set({ user: null, organizations: [], hydrated: true });
+    }
   },
 };
 });

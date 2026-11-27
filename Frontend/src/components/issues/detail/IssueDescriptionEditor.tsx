@@ -31,6 +31,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { apiOrigin, apiUploadFile } from "@/lib/api-client";
+import { useUIStore } from "@/stores/useUIStore";
 
 const purifyOpts = {
   ADD_TAGS: ["img", "ul", "ol", "li", "input", "label", "pre", "code"],
@@ -53,8 +54,14 @@ function sanitizeHtml(html: string) {
 }
 
 export type IssueDescriptionEditorHandle = {
+  /** Saves any pending edit now; rejects if the save fails. */
   flush: () => Promise<void>;
 };
+
+function reportSaveError(e: unknown) {
+  const msg = e instanceof Error && e.message ? e.message : "Could not save description";
+  useUIStore.getState().showToast(msg, "error");
+}
 
 function toolbarBtn(active: boolean) {
   return active ? "issue-toolbar-icon issue-toolbar-icon-active" : "issue-toolbar-icon";
@@ -64,20 +71,53 @@ export const IssueDescriptionEditor = forwardRef<
   IssueDescriptionEditorHandle,
   {
     initialHtml: string;
+    /** Must reject when the save fails. */
     onSave: (html: string) => Promise<void>;
   }
 >(function IssueDescriptionEditor({ initialHtml, onSave }, ref) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** HTML waiting on the debounce timer (flushed on unmount instead of dropped). */
+  const pendingHtml = useRef<string | null>(null);
+  /** Saves currently in flight. */
+  const inFlight = useRef(0);
+  /** Last HTML this editor saved successfully (or loaded); used to ignore our own echo. */
+  const lastSavedHtml = useRef<string>(sanitizeHtml(initialHtml));
+  const onSaveRef = useRef(onSave);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  /** Runs a save, tracking in-flight state. Rejects on failure. */
+  const runSave = useCallback(async (html: string) => {
+    inFlight.current += 1;
+    try {
+      await onSaveRef.current(html);
+      lastSavedHtml.current = html;
+    } finally {
+      inFlight.current -= 1;
+    }
+  }, []);
+
+  const cancelTimer = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    pendingHtml.current = null;
+  }, []);
 
   const scheduleSave = useCallback(
     (html: string) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      pendingHtml.current = html;
       saveTimer.current = setTimeout(() => {
         saveTimer.current = null;
-        void onSave(html);
+        pendingHtml.current = null;
+        runSave(html).catch(reportSaveError);
       }, 800);
     },
-    [onSave],
+    [runSave],
   );
 
   const editor = useEditor({
@@ -113,42 +153,52 @@ export const IssueDescriptionEditor = forwardRef<
     ref,
     () => ({
       flush: async () => {
-        if (saveTimer.current) {
-          clearTimeout(saveTimer.current);
-          saveTimer.current = null;
-        }
-        if (editor) await onSave(editor.getHTML());
+        const hadPending = pendingHtml.current !== null;
+        cancelTimer();
+        if (!editor) return;
+        const html = editor.getHTML();
+        if (!hadPending && html === lastSavedHtml.current) return;
+        await runSave(html);
       },
     }),
-    [editor, onSave],
+    [editor, cancelTimer, runSave],
   );
 
   useEffect(() => {
     return () => {
+      // Flush (don't drop) an edit still waiting on the debounce when the editor unmounts.
+      const html = pendingHtml.current;
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      pendingHtml.current = null;
+      if (html !== null) runSave(html).catch(reportSaveError);
     };
-  }, []);
+  }, [runSave]);
 
   useEffect(() => {
     if (!editor) return;
     const onBlur = () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
-      void onSave(editor.getHTML());
+      const hadPending = pendingHtml.current !== null;
+      cancelTimer();
+      const html = editor.getHTML();
+      if (!hadPending && html === lastSavedHtml.current) return;
+      runSave(html).catch(reportSaveError);
     };
     editor.on("blur", onBlur);
     return () => {
       editor.off("blur", onBlur);
     };
-  }, [editor, onSave]);
+  }, [editor, cancelTimer, runSave]);
 
   useEffect(() => {
     if (!editor) return;
+    // Never clobber local typing: skip while focused or while a save is pending / in flight.
+    if (editor.isFocused || pendingHtml.current !== null || inFlight.current > 0) return;
     const next = sanitizeHtml(initialHtml);
-    const cur = editor.getHTML();
-    if (next !== cur) editor.commands.setContent(next, { emitUpdate: false });
+    // Our own save echoing back from the server.
+    if (initialHtml === lastSavedHtml.current || next === lastSavedHtml.current) return;
+    if (next !== editor.getHTML()) editor.commands.setContent(next, { emitUpdate: false });
+    lastSavedHtml.current = next;
   }, [initialHtml, editor]);
 
   const insertImage = () => {

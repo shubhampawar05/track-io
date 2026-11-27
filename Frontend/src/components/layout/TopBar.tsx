@@ -66,7 +66,8 @@ export function TopBar() {
   const { data: sprintRes } = useQuery({
     queryKey: ["activeSprint", organizationId],
     enabled: Boolean(organizationId) && pathname.startsWith("/issues"),
-    queryFn: async () => apiJson<ActiveSprintDto>("/api/sprints/active"),
+    queryFn: async ({ queryKey }) =>
+      apiJson<ActiveSprintDto>("/api/sprints/active", { orgId: queryKey[1] }),
   });
 
   const sprintName =

@@ -32,8 +32,8 @@ export function IntegrationsView() {
   const [lastWebhook, setLastWebhook] = useState<{ webhookUrl: string; secret: string } | null>(null);
   const githubQuery = useQuery({
     queryKey: ["github-integration", organizationId],
-    queryFn: async () => {
-      const r = await fetchGithubIntegrationStatus();
+    queryFn: async ({ queryKey }) => {
+      const r = await fetchGithubIntegrationStatus(queryKey[1]);
       if (!r.success) throw new Error(r.error);
       return r.data;
     },

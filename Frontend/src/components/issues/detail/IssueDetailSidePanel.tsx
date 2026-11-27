@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
@@ -27,12 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiJson } from "@/lib/api-client";
+import { useProjectDetail } from "@/hooks/useProjectDetail";
 import { cn } from "@/lib/utils";
 import { resolveIssueCloseHref } from "@/lib/issue-detail-from";
 import type {
   IssueDetail,
   Priority,
-  ProjectDetail,
   ProjectMember,
   Status,
 } from "@/types/issue";
@@ -103,16 +103,11 @@ export function IssueDetailSidePanel({
 
   const slug = issue.projectSlug || issue.projectId || "";
 
-  const { data: projectApi } = useQuery({
-    queryKey: ["project", organizationId, slug],
-    enabled: Boolean(slug && organizationId),
-    queryFn: async () =>
-      apiJson<ProjectDetail>(`/api/projects/${encodeURIComponent(slug)}`),
-  });
+  const { data: projectData } = useProjectDetail(slug);
 
   const members = useMemo(
-    () => (projectApi?.success ? projectApi.data.members : []),
-    [projectApi],
+    () => projectData?.members ?? [],
+    [projectData],
   );
 
   const patch = useCallback(
@@ -241,7 +236,7 @@ export function IssueDetailSidePanel({
               <span className="text-xs text-linear-text-muted">Assignee</span>
               <Select
                 modal={false}
-                disabled={patching || !slug || !projectApi?.success}
+                disabled={patching || !slug || !projectData}
                 value={assigneeValue}
                 onValueChange={(v) => {
                   void patch(

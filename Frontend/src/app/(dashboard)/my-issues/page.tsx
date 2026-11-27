@@ -2,12 +2,9 @@
 
 import { ListView } from "@/components/issues/ListView";
 import { useIssuesList } from "@/hooks/useIssuesList";
-import { useAuthStore } from "@/stores/useAuthStore";
 
 export default function MyIssuesPage() {
-  const user = useAuthStore((s) => s.user);
-  const { issues, loading } = useIssuesList(null);
-  const mine = issues.filter((i) => i.assignee === user?.initials);
+  const { issues: mine, loading } = useIssuesList(null, { assignedToMe: true });
 
   return (
     <div className="p-8 flex flex-col gap-6 min-h-0">
