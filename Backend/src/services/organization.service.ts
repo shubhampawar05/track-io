@@ -10,6 +10,7 @@ import {
   normalizeBoardColumnsFromDoc,
   unionColumnsFromProjects,
 } from "../utils/boardColumns";
+import { LIMITS, assertMaxLength } from "../utils/inputLimits";
 import { publicApiBase } from "../utils/uploadUrl";
 
 export type OrganizationMemberDto = {
@@ -51,6 +52,7 @@ export async function updateOrganizationName(
   }
   const name = nameRaw.trim();
   if (!name) throw new HttpError(400, "Invalid input");
+  assertMaxLength(name, LIMITS.name, "Workspace name");
   const org = await Organization.findById(organizationId);
   if (!org) throw new HttpError(404, "Organization not found");
   org.name = name;

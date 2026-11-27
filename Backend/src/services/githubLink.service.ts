@@ -24,6 +24,26 @@ export async function keyPrefixesForOrganization(organizationId: mongoose.Types.
   return [...new Set(rows.map((r) => r.keyPrefix).filter(Boolean))];
 }
 
+function repoFullNameFilter(repoFullName: string): RegExp | null {
+  const normalized = repoFullName.trim().toLowerCase().replace(/\.git$/i, "");
+  if (!normalized) return null;
+  /** GitHub `full_name` has no `.git`; users sometimes save `owner/repo.git`. */
+  return new RegExp(`^${escapeRegex(normalized)}(\\.git)?$`, "i");
+}
+
+/** Key prefixes of only the projects linked to `repoFullName` (spec §8: repos map to projects). */
+export async function keyPrefixesForRepo(
+  organizationId: mongoose.Types.ObjectId,
+  repoFullName: string,
+): Promise<string[]> {
+  const filter = repoFullNameFilter(repoFullName);
+  if (!filter) return [];
+  const rows = await Project.find({ organizationId, githubRepoFullName: { $regex: filter } })
+    .select("keyPrefix")
+    .lean();
+  return [...new Set(rows.map((r) => r.keyPrefix).filter(Boolean))];
+}
+
 export async function repoFullNameAllowedForOrg(
   organizationId: mongoose.Types.ObjectId,
   repoFullName: string,
@@ -104,11 +124,20 @@ export async function upsertGithubLinksForIssues(
   }
 }
 
+/**
+ * Issue keys mentioned in branch names / PR text. When `repoFullName` is given (webhooks), only
+ * keys of projects linked to that repository count, so a PR in repo A cannot attach links to
+ * issues of an unrelated project B that happens to be mentioned.
+ */
 export async function collectDisplayIdsForGithubPayload(
   organizationId: mongoose.Types.ObjectId,
   parts: string[],
+  repoFullName?: string,
 ): Promise<string[]> {
-  const prefixes = await keyPrefixesForOrganization(organizationId);
+  const prefixes =
+    repoFullName !== undefined
+      ? await keyPrefixesForRepo(organizationId, repoFullName)
+      : await keyPrefixesForOrganization(organizationId);
   const seen = new Set<string>();
   const out: string[] = [];
   for (const text of parts) {

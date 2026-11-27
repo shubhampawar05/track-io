@@ -83,6 +83,11 @@ function reject(res: Response, b: Bucket, now: number) {
   res.status(429).json(fail("Too many requests. Try again later."));
 }
 
+/** Keys a limiter on the signed-in user (skips anonymous requests, which requireAuth rejects). */
+export function byUser(req: Request): string | null {
+  return req.userId ?? null;
+}
+
 /** Keys a limiter on the normalized `email` field of a JSON body (per-account throttling). */
 export function byBodyEmail(req: Request): string | null {
   const raw = (req.body as { email?: unknown } | undefined)?.email;

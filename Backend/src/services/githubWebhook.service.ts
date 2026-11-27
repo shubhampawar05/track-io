@@ -73,7 +73,7 @@ export async function handleGithubWebhook(
     if (!rp || !pr || prNum == null) return { ok: true, status: 200 };
     const headRef = pr.head?.ref ?? "";
     const texts = [headRef, pr.title ?? "", pr.body ?? ""].filter(Boolean) as string[];
-    const displayIds = await collectDisplayIdsForGithubPayload(organizationId, texts);
+    const displayIds = await collectDisplayIdsForGithubPayload(organizationId, texts, fullName ?? "");
     if (displayIds.length === 0) return { ok: true, status: 200 };
 
     await upsertGithubLinksForIssues(organizationId, displayIds, {
@@ -99,7 +99,7 @@ export async function handleGithubWebhook(
     const rp = repoParts(fullName, p.repository as { owner?: { login?: string }; name?: string });
     if (!rp || !p.ref?.startsWith("refs/heads/")) return { ok: true, status: 200 };
     const headRef = p.ref.replace(/^refs\/heads\//, "");
-    const displayIds = await collectDisplayIdsForGithubPayload(organizationId, [headRef]);
+    const displayIds = await collectDisplayIdsForGithubPayload(organizationId, [headRef], fullName ?? "");
     if (displayIds.length === 0) return { ok: true, status: 200 };
     const compareUrl = `https://github.com/${rp.owner}/${rp.repo}/tree/${encodeURIComponent(headRef)}`;
     await upsertGithubLinksForIssues(organizationId, displayIds, {

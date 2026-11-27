@@ -5,6 +5,9 @@ import { requireAuth } from "../middleware/auth";
 import { requireOrganization } from "../middleware/organization";
 import { transcriptionRecordingRoutes } from "./transcriptionRecording.routes";
 import { fail } from "../types/api";
+import { byUser, rateLimit } from "../middleware/rateLimit";
+
+const HOUR = 60 * 60_000;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -24,7 +27,8 @@ export const transcriptionRoutes = Router();
 
 transcriptionRoutes.use(requireAuth, requireOrganization);
 
-transcriptionRoutes.post("/extract", (req, res, next) => {
+/** Each call spends OpenAI credits: cap per user. */
+transcriptionRoutes.post("/extract", rateLimit("ai-extract", 30, { windowMs: HOUR, keyBy: byUser }), (req, res, next) => {
   upload.single("file")(req, res, (err: unknown) => {
     if (err) {
       res.status(400).json(fail(String((err as Error).message || "Invalid upload")));

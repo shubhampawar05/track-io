@@ -43,6 +43,16 @@ function resolveGithubEncryptionKey(): string {
   return "";
 }
 
+function resolvePort(): number {
+  const raw = process.env.PORT?.trim();
+  if (!raw) return 4000;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    throw new Error(`PORT must be an integer between 1 and 65535 (got "${raw}")`);
+  }
+  return n;
+}
+
 function resolveSmtpPort(): number {
   const n = Number(process.env.SMTP_PORT ?? 587);
   return Number.isFinite(n) ? n : 587;
@@ -73,7 +83,7 @@ function parseFrontendOrigins(): string[] {
 const frontendOrigins = parseFrontendOrigins();
 
 export const env = {
-  PORT: Number(process.env.PORT ?? 4000),
+  PORT: resolvePort(),
   MONGODB_URI: process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017/trackio",
   JWT_SECRET: resolveJwtSecret(),
   /** Primary frontend URL (emails, OAuth redirects). First value when comma-separated. */

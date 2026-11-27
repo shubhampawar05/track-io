@@ -148,9 +148,8 @@ export async function extractCandidatesWithLlm(transcriptText: string): Promise<
     if (e?.status === 429) {
       throw new HttpError(502, "OpenAI rate limit or quota exceeded.");
     }
-    if (typeof e?.message === "string" && e.message.trim()) {
-      throw new HttpError(502, `OpenAI extraction failed: ${e.message.slice(0, 200)}`);
-    }
+    // Keep upstream details in server logs only; clients get a generic message.
+    console.error("OpenAI extraction failed", e?.status, e?.message);
     throw new HttpError(502, "Failed to extract tasks from transcription");
   }
 }
