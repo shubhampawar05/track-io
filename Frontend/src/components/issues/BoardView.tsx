@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -33,7 +32,7 @@ import type { Issue, Status } from "@/types/issue";
 import {
   buildBoardItemMap,
   cloneBoardItemMap,
-  computeBoardReorderUpdates,
+  computeBoardMoveUpdate,
   emptyBoardItemMap,
   findBoardItemContainer,
   type BoardReorderEntry,
@@ -50,9 +49,13 @@ import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { IssuePipelineFilterChipsRow } from "@/components/issues/ListView";
 import { IssuesBoardSkeleton } from "@/components/issues/IssuesBoardSkeleton";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { buildIssueDetailUrl } from "@/lib/issue-detail-from";
 import type { ProjectDetail } from "@/types/issue";
-import type { PipelineFilterState } from "@/hooks/useIssuesList";
+import {
+  buildIssuesListQueryString,
+  type PipelineFilterState,
+} from "@/hooks/useIssuesList";
 
 const DEFAULT_COLUMNS: BoardColumnConfig[] = [
   { id: "col-backlog", title: "Backlog", status: "backlog" },
@@ -70,6 +73,8 @@ function newColumnId(): string {
 export function BoardView({
   issues,
   loading,
+  error,
+  onRetry,
   onBoardReorder,
   boardScope = "__global__",
   issueNavFrom = "board",
@@ -78,7 +83,11 @@ export function BoardView({
 }: {
   issues: Issue[];
   loading?: boolean;
-  onBoardReorder: (updates: BoardReorderEntry[]) => void | Promise<void>;
+  /** Load failure for `issues`; renders an error state instead of empty columns. */
+  error?: unknown;
+  onRetry?: () => void;
+  /** Persist a single card move (status + sortOrder). */
+  onBoardReorder: (update: BoardReorderEntry) => void | Promise<void>;
   /** Persist columns per org + scope (e.g. project slug or __global__). */
   boardScope?: string;
   /** Where "back" should go when opening an issue from this board. */
@@ -102,7 +111,8 @@ export function BoardView({
     return role === "owner" || role === "admin";
   }, [organizationId, organizations]);
 
-  const [columns, setColumns] = useState<BoardColumnConfig[]>(DEFAULT_COLUMNS);
+  /** Org + board scope the columns belong to; local edits and saves are always tied to it. */
+  const scopeKey = `${organizationId ?? ""}::${boardScope}`;
 
   const columnsQuery = useQuery({
     queryKey: isGlobalBoard
@@ -128,124 +138,98 @@ export function BoardView({
     },
   });
 
-  useEffect(() => {
-    if (!organizationId) {
-      startTransition(() => setColumns(DEFAULT_COLUMNS));
-      return;
-    }
-    const data = columnsQuery.data;
-    if (!data) return;
-    startTransition(() => setColumns(data));
-  }, [organizationId, columnsQuery.data]);
+  /**
+   * Optimistic local edit awaiting save. Keyed by scope so switching project/org can never show
+   * (or save) another board's columns; otherwise the server columns are rendered directly.
+   */
+  const [pendingColumns, setPendingColumns] = useState<{
+    scope: string;
+    cols: BoardColumnConfig[];
+  } | null>(null);
 
-  const patchProjectBoardMutation = useMutation({
-    mutationFn: async (cols: BoardColumnConfig[]) => {
-      const r = await apiJson<ProjectDetail>(
-        `/api/projects/${encodeURIComponent(boardScope)}`,
-        { method: "PATCH", body: { boardColumns: cols } },
-      );
-      if (!r.success) throw new Error(r.error);
-      return r.data;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(
-        ["projectBoardColumns", organizationId, boardScope],
-        data.boardColumns,
-      );
-      queryClient.setQueryData(projectDetailQueryKey(organizationId, boardScope), data);
-      void queryClient.invalidateQueries({
-        queryKey: ["issuesBoardColumns", organizationId],
-      });
-    },
-  });
+  const columns: BoardColumnConfig[] =
+    pendingColumns && pendingColumns.scope === scopeKey
+      ? pendingColumns.cols
+      : organizationId
+        ? (columnsQuery.data ?? DEFAULT_COLUMNS)
+        : DEFAULT_COLUMNS;
 
-  const patchOrgBoardMutation = useMutation({
-    mutationFn: async (cols: BoardColumnConfig[]) => {
-      const r = await apiJson<{ columns: BoardColumnConfig[] }>(
-        "/api/organizations",
-        {
+  type ColumnsSaveVars = {
+    orgId: string;
+    scope: string;
+    isGlobal: boolean;
+    cols: BoardColumnConfig[] | null;
+  };
+
+  const saveColumnsMutation = useMutation({
+    mutationFn: async ({ orgId, scope, isGlobal, cols }: ColumnsSaveVars) => {
+      if (isGlobal) {
+        const r = await apiJson<{ columns: BoardColumnConfig[] }>("/api/organizations", {
           method: "PATCH",
           body: { issuesBoardColumns: cols },
-        },
-      );
-      if (!r.success) throw new Error(r.error);
-      return r.data.columns;
-    },
-    onSuccess: (cols) => {
-      queryClient.setQueryData(["issuesBoardColumns", organizationId], cols);
-    },
-  });
-
-  const clearOrgBoardMutation = useMutation({
-    mutationFn: async () => {
-      const r = await apiJson<{ columns: BoardColumnConfig[] }>(
-        "/api/organizations",
-        {
-          method: "PATCH",
-          body: { issuesBoardColumns: null },
-        },
-      );
-      if (!r.success) throw new Error(r.error);
-      return r.data.columns;
-    },
-    onSuccess: (cols) => {
-      queryClient.setQueryData(["issuesBoardColumns", organizationId], cols);
-      setColumns(cols);
-    },
-  });
-
-  useEffect(() => {
-    if (!organizationId || !columnsQuery.isSuccess) return;
-    const serverCols = columnsQuery.data;
-    if (!serverCols) return;
-    if (
-      patchProjectBoardMutation.isPending ||
-      patchOrgBoardMutation.isPending ||
-      clearOrgBoardMutation.isPending
-    ) {
-      return;
-    }
-    if (!canManageBoard) return;
-    if (JSON.stringify(columns) === JSON.stringify(serverCols)) return;
-    const t = window.setTimeout(() => {
-      const revert = () => {
-        showToast("Could not save board columns", "error");
-        if (isGlobalBoard) {
-          const c = queryClient.getQueryData<BoardColumnConfig[]>([
-            "issuesBoardColumns",
-            organizationId,
-          ]);
-          if (c) setColumns(c);
-        } else {
-          const c = queryClient.getQueryData<BoardColumnConfig[]>([
-            "projectBoardColumns",
-            organizationId,
-            boardScope,
-          ]);
-          if (c) setColumns(c);
-        }
-      };
-      if (isGlobalBoard) {
-        patchOrgBoardMutation.mutate(columns, { onError: revert });
-      } else {
-        patchProjectBoardMutation.mutate(columns, { onError: revert });
+          orgId,
+        });
+        if (!r.success) throw new Error(r.error);
+        return { columns: r.data.columns, project: null as ProjectDetail | null };
       }
-    }, 350);
-    return () => window.clearTimeout(t);
-  }, [
-    columns,
-    organizationId,
-    columnsQuery.data,
-    columnsQuery.isSuccess,
-    canManageBoard,
-    isGlobalBoard,
-    showToast,
-    patchOrgBoardMutation,
-    patchProjectBoardMutation,
-    clearOrgBoardMutation,
-    queryClient,
-    boardScope,
-  ]);
+      const r = await apiJson<ProjectDetail>(`/api/projects/${encodeURIComponent(scope)}`, {
+        method: "PATCH",
+        body: { boardColumns: cols ?? DEFAULT_COLUMNS },
+        orgId,
+      });
+      if (!r.success) throw new Error(r.error);
+      return { columns: r.data.boardColumns, project: r.data };
+    },
+    onSuccess: (data, { orgId, scope, isGlobal }) => {
+      if (isGlobal) {
+        queryClient.setQueryData(["issuesBoardColumns", orgId], data.columns);
+      } else {
+        queryClient.setQueryData(["projectBoardColumns", orgId, scope], data.columns);
+        if (data.project) {
+          queryClient.setQueryData(projectDetailQueryKey(orgId, scope), data.project);
+        }
+        void queryClient.invalidateQueries({ queryKey: ["issuesBoardColumns", orgId] });
+      }
+    },
+  });
+  const saveColumns = saveColumnsMutation.mutate;
+
+  /** Apply a column edit optimistically and persist it to the scope the columns came from. */
+  const persistColumns = useCallback(
+    (
+      next: BoardColumnConfig[] | null,
+      opts?: { successMessage?: string; errorMessage?: string },
+    ) => {
+      if (!organizationId || !canManageBoard) return;
+      const scope = scopeKey;
+      const pending = next ? { scope, cols: next } : null;
+      if (pending) setPendingColumns(pending);
+      const settle = () =>
+        setPendingColumns((cur) => (cur === pending ? null : cur));
+      saveColumns(
+        { orgId: organizationId, scope: boardScope, isGlobal: isGlobalBoard, cols: next },
+        {
+          onSuccess: () => {
+            settle();
+            if (opts?.successMessage) showToast(opts.successMessage);
+          },
+          onError: () => {
+            settle();
+            showToast(opts?.errorMessage ?? "Could not save board columns", "error");
+          },
+        },
+      );
+    },
+    [
+      organizationId,
+      canManageBoard,
+      scopeKey,
+      saveColumns,
+      boardScope,
+      isGlobalBoard,
+      showToast,
+    ],
+  );
 
   const [addOpen, setAddOpen] = useState(false);
   const [addTitle, setAddTitle] = useState("");
@@ -322,26 +306,17 @@ export function BoardView({
   const resetColumns = useCallback(() => {
     if (!canManageBoard) return;
     if (isGlobalBoard) {
-      clearOrgBoardMutation.mutate(undefined, {
-        onSuccess: () =>
-          showToast(
-            "Issues board reset — columns now follow all projects (merged)",
-          ),
-        onError: () => showToast("Could not reset columns", "error"),
+      persistColumns(null, {
+        successMessage: "Issues board reset — columns now follow all projects (merged)",
+        errorMessage: "Could not reset columns",
       });
     } else {
-      patchProjectBoardMutation.mutate(DEFAULT_COLUMNS, {
-        onSuccess: () => showToast("Board columns reset to default"),
-        onError: () => showToast("Could not reset columns", "error"),
+      persistColumns(DEFAULT_COLUMNS, {
+        successMessage: "Board columns reset to default",
+        errorMessage: "Could not reset columns",
       });
     }
-  }, [
-    canManageBoard,
-    isGlobalBoard,
-    clearOrgBoardMutation,
-    patchProjectBoardMutation,
-    showToast,
-  ]);
+  }, [canManageBoard, isGlobalBoard, persistColumns]);
 
   const submitAddColumn = useCallback(() => {
     const title = addTitle.trim();
@@ -354,11 +329,12 @@ export function BoardView({
       showToast("A column with that status already exists", "error");
       return;
     }
-    setColumns((prev) => [...prev, { id: newColumnId(), title, status }]);
+    persistColumns([...columns, { id: newColumnId(), title, status }], {
+      successMessage: "Column added",
+    });
     setAddTitle("");
     setAddOpen(false);
-    showToast("Column added");
-  }, [addTitle, columns, showToast]);
+  }, [addTitle, columns, persistColumns, showToast]);
 
   const submitRename = useCallback(() => {
     const title = renameTitle.trim();
@@ -366,26 +342,65 @@ export function BoardView({
       showToast("Enter a title", "error");
       return;
     }
-    setColumns((prev) =>
-      prev.map((c) => (c.id === renameId ? { ...c, title } : c)),
+    persistColumns(
+      columns.map((c) => (c.id === renameId ? { ...c, title } : c)),
+      { successMessage: "Column renamed" },
     );
     setRenameId(null);
     setRenameTitle("");
-    showToast("Column renamed");
-  }, [renameId, renameTitle, showToast]);
+  }, [renameId, renameTitle, columns, persistColumns, showToast]);
+
+  const [removingColumnId, setRemovingColumnId] = useState<string | null>(null);
 
   const removeColumn = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const col = columns.find((c) => c.id === id);
-      if (!col) return;
+      if (!col || !organizationId) return;
       if (PROTECTED_BOARD_STATUSES.has(String(col.status))) {
         showToast("Cannot remove a default column", "error");
         return;
       }
-      setColumns((prev) => prev.filter((c) => c.id !== id));
-      showToast(`Removed “${col.title}”`);
+      const status = String(col.status);
+      const blockedMessage = (n: number | null) =>
+        `“${col.title}” still has ${n == null ? "issues" : `${n} issue${n === 1 ? "" : "s"}`} — move them to another column before removing it`;
+
+      // Visible cards may be a filtered subset, so also ask the server for every issue in this
+      // board's scope with this status before allowing the column (and its issues) to disappear.
+      const visible = issues.filter((i) => i.status === status).length;
+      if (visible > 0) {
+        showToast(blockedMessage(visible), "error");
+        return;
+      }
+      setRemovingColumnId(id);
+      try {
+        const q = buildIssuesListQueryString({
+          status: [status],
+          priority: [],
+          label: [],
+          assignee: [],
+        });
+        const path = isGlobalBoard
+          ? `/api/issues${q}`
+          : `/api/projects/${encodeURIComponent(boardScope)}/issues${q}`;
+        const r = await apiJson<Issue[]>(path, { orgId: organizationId });
+        if (!r.success) {
+          showToast("Could not check this column’s issues — try again", "error");
+          return;
+        }
+        const total = r.data.filter((i) => i.status === status).length;
+        if (total > 0) {
+          showToast(blockedMessage(total), "error");
+          return;
+        }
+      } finally {
+        setRemovingColumnId(null);
+      }
+      persistColumns(
+        columns.filter((c) => c.id !== id),
+        { successMessage: `Removed “${col.title}”` },
+      );
     },
-    [columns, showToast],
+    [columns, organizationId, issues, isGlobalBoard, boardScope, persistColumns, showToast],
   );
 
   const openRename = useCallback(
@@ -499,17 +514,20 @@ export function BoardView({
       }
 
       setItems(next);
-      const updates = computeBoardReorderUpdates(
-        baselineIssuesRef.current,
-        next,
-        columnStatuses,
-      );
       const snapshotForRevert = dragBaselineMapRef.current;
       dragBaselineMapRef.current = null;
+      const update = snapshotForRevert
+        ? computeBoardMoveUpdate(
+            baselineIssuesRef.current,
+            snapshotForRevert,
+            next,
+            String(active.id),
+          )
+        : null;
 
       try {
-        if (updates.length > 0) {
-          await onBoardReorder(updates);
+        if (update) {
+          await onBoardReorder(update);
         }
       } catch {
         showToast("Could not save board order", "error");
@@ -518,13 +536,28 @@ export function BoardView({
         draggingBoardRef.current = false;
       }
     },
-    [columnStatuses, onBoardReorder, showToast],
+    [onBoardReorder, showToast],
   );
 
   const columnsLoading = Boolean(organizationId) && columnsQuery.isPending;
 
   if (loading || columnsLoading) {
     return <IssuesBoardSkeleton />;
+  }
+
+  if (error || columnsQuery.isError) {
+    return (
+      <div className="w-full min-w-0 p-6">
+        <QueryErrorState
+          message={error ? "Could not load issues." : "Could not load board columns."}
+          error={error ?? columnsQuery.error}
+          onRetry={() => {
+            if (error) onRetry?.();
+            if (columnsQuery.isError) void columnsQuery.refetch();
+          }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -563,7 +596,10 @@ export function BoardView({
               onNewIssue={() => openNewIssueModal(issues[0]?.projectId ?? null)}
               canManageColumn={canManageBoard}
               onRenameColumn={() => openRename(col.id)}
-              onRemoveColumn={() => removeColumn(col.id)}
+              onRemoveColumn={() => {
+                if (removingColumnId) return;
+                void removeColumn(col.id);
+              }}
             />
           ))}
           {canManageBoard && (

@@ -9,20 +9,47 @@ import { ProjectWorkspaceHeader } from "@/components/projects/ProjectWorkspaceHe
 import { useIssuesList } from "@/hooks/useIssuesList";
 import { useProjectsList } from "@/hooks/useProjectsList";
 import { ProjectWorkspaceSkeleton } from "@/components/projects/ProjectWorkspaceSkeleton";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "board" ? "board" : "list";
   const decoded = decodeURIComponent(projectId);
-  const { projects, loading: loadingProjects } = useProjectsList();
+  const {
+    projects,
+    loading: loadingProjects,
+    isError: projectsError,
+    error: projectsErrorValue,
+    refetch: refetchProjects,
+  } = useProjectsList();
   const project = projects.find((p) => p.slug === decoded || p.name === decoded);
-  const { issues, loading: loadingIssues, reorderBoard, appliedPipelineFilters } = useIssuesList(
+  const {
+    issues,
+    loading: loadingIssues,
+    isError: issuesError,
+    error: issuesErrorValue,
+    refetch: refetchIssues,
+    reorderBoard,
+    appliedPipelineFilters,
+  } = useIssuesList(
     project ? project.slug : "",
     { applyPipelineFilters: true },
   );
 
   if (loadingProjects) {
     return <ProjectWorkspaceSkeleton />;
+  }
+
+  if (!project && projectsError) {
+    return (
+      <div className="p-8">
+        <QueryErrorState
+          message="Could not load this project."
+          error={projectsErrorValue}
+          onRetry={() => void refetchProjects()}
+        />
+      </div>
+    );
   }
 
   if (!project) {
@@ -52,11 +79,13 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               <BoardView
                 issues={issues}
                 loading={loadingIssues}
+                error={issuesError ? issuesErrorValue : null}
+                onRetry={() => void refetchIssues()}
                 boardScope={project.slug}
                 issueNavFrom="project"
                 issueNavProjectView={view}
                 appliedPipelineFilters={appliedPipelineFilters}
-                onBoardReorder={(updates) => reorderBoard(updates)}
+                onBoardReorder={(update) => reorderBoard(update)}
               />
             </motion.div>
           ) : (
@@ -70,6 +99,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               <ListView
                 issues={issues}
                 loading={loadingIssues}
+                error={issuesError ? issuesErrorValue : null}
+                onRetry={() => void refetchIssues()}
                 projectSlug={project.slug}
                 issueNavFrom="project"
                 issueNavProjectView={view}

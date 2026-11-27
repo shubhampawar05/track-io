@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { AtSign, MessageSquare, Paperclip, Pencil, Send, Smile, X } from "lucide-react";
 import { CommentEmojiPicker } from "@/components/issues/detail/CommentEmojiPicker";
@@ -93,21 +93,27 @@ export function IssueDetailActivity({
     });
   };
 
-  const pendingImagePreviewUrls = useMemo(
-    () =>
-      pendingFiles.map((f) =>
-        f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
-      ),
-    [pendingFiles],
-  );
+  const [previewState, setPreviewState] = useState<{
+    files: File[];
+    urls: (string | null)[];
+  }>({ files: [], urls: [] });
+  // Only use URLs created for the current file list (avoids a one-render mismatch after edits).
+  const pendingImagePreviewUrls =
+    previewState.files === pendingFiles ? previewState.urls : [];
 
+  // Object URLs are created and revoked in the same effect so StrictMode's mount/unmount/mount
+  // cycle never leaves the previews pointing at already-revoked URLs.
   useEffect(() => {
+    const urls = pendingFiles.map((f) =>
+      f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
+    );
+    setPreviewState({ files: pendingFiles, urls });
     return () => {
-      pendingImagePreviewUrls.forEach((u) => {
+      urls.forEach((u) => {
         if (u) URL.revokeObjectURL(u);
       });
     };
-  }, [pendingImagePreviewUrls]);
+  }, [pendingFiles]);
 
   const removePendingFile = (index: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
@@ -192,6 +198,7 @@ export function IssueDetailActivity({
                       <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
                     </button>
                   ) : null}
+                  {user?.id === c.authorUserId ? (
                   <div className="relative" data-comment-emoji-picker>
                     <button
                       type="button"
@@ -220,6 +227,7 @@ export function IssueDetailActivity({
                       </div>
                     ) : null}
                   </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => replyTo(c)}

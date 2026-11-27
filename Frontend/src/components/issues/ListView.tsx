@@ -15,6 +15,7 @@ import {
 import { useUIStore } from "@/stores/useUIStore";
 import type { Issue } from "@/types/issue";
 import { IssuesListSkeleton } from "@/components/issues/IssuesListSkeleton";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { buildIssueDetailUrl } from "@/lib/issue-detail-from";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useOrganizationMembersQuery } from "@/hooks/useOrganizationRosterQueries";
@@ -95,6 +96,8 @@ function emptyMessage(tab: ListPipelineTab): string {
 export function ListView({
   issues,
   loading,
+  error,
+  onRetry,
   projectSlug,
   embedded,
   issueNavFrom = "list",
@@ -103,6 +106,9 @@ export function ListView({
 }: {
   issues: Issue[];
   loading?: boolean;
+  /** Load failure for `issues`; renders an error state instead of the empty state. */
+  error?: unknown;
+  onRetry?: () => void;
   /** When set, empty-state “New issue” opens the modal scoped to this project. */
   projectSlug?: string | null;
   embedded?: boolean;
@@ -180,7 +186,9 @@ export function ListView({
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {error ? (
+        <QueryErrorState message="Could not load issues." error={error} onRetry={onRetry} />
+      ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-(--border) p-10 text-center space-y-4">
           <p className="text-sm text-linear-text-muted">{emptyMessage(tab)}</p>
           <button

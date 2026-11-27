@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { IntegrationIcon } from "@/components/integrations/IntegrationIcon";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import {
   disconnectGithubIntegration,
   fetchGithubIntegrationStatus,
@@ -209,7 +210,14 @@ export function IntegrationsView() {
       <div className="space-y-6">
         <h3 className="text-xs font-bold uppercase tracking-widest text-linear-text-muted">Available</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {!githubConnected && organizationId && !githubQuery.isPending ? (
+          {organizationId && githubQuery.isError ? (
+            <QueryErrorState
+              className="linear-card"
+              message="Could not load GitHub integration status."
+              error={githubQuery.error}
+              onRetry={() => void githubQuery.refetch()}
+            />
+          ) : !githubConnected && organizationId && !githubQuery.isPending ? (
             <div className="linear-card p-6 flex flex-col justify-between gap-6 hover:border-linear-accent/30 transition-all duration-200">
               <div className="flex items-center justify-between gap-4">
                 <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-[var(--border)]">
@@ -229,9 +237,6 @@ export function IntegrationsView() {
                 <p className="text-xs text-linear-text-muted leading-relaxed">{GITHUB_DESCRIPTION}</p>
                 {!canManageGithub ? (
                   <p className="text-xs text-linear-text-muted mt-2">Only workspace owners and admins can connect.</p>
-                ) : null}
-                {githubQuery.isError ? (
-                  <p className="text-xs text-red-400 mt-2">Could not load GitHub status.</p>
                 ) : null}
               </div>
             </div>

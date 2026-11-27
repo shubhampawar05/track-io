@@ -3,7 +3,8 @@ import { apiJson, apiUploadRecording } from "@/lib/api-client";
 import type { RecordingUploadResult, TranscriptionCandidate } from "@/types/issue";
 import { useUIStore } from "@/stores/useUIStore";
 
-export type RecordingSessionPhase = "idle" | "capturing" | "stopped" | "uploading";
+/** `starting` = waiting for microphone permission / getUserMedia (blocks a second start). */
+export type RecordingSessionPhase = "idle" | "starting" | "capturing" | "stopped" | "uploading";
 
 type Internal = {
   stream: MediaStream | null;
@@ -13,6 +14,8 @@ type Internal = {
   startedAtMs: number | null;
   mimeType: string;
   ignoreNextStop: boolean;
+  /** Bumped by every start/discard; a getUserMedia result for a stale attempt is released. */
+  startAttempt: number;
 };
 
 const internal: Internal = {
@@ -23,6 +26,7 @@ const internal: Internal = {
   startedAtMs: null,
   mimeType: "audio/webm",
   ignoreNextStop: false,
+  startAttempt: 0,
 };
 
 function clearTimer() {
@@ -63,7 +67,8 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
 
   startRecording: async () => {
     const showToast = useUIStore.getState().showToast;
-    if (get().phase === "capturing" || get().phase === "uploading") return;
+    const current = get().phase;
+    if (current === "starting" || current === "capturing" || current === "uploading") return;
     if (get().phase === "stopped" && get().audioBlob) {
       showToast("Stop and extract or discard the current clip first", "error");
       return;
@@ -72,8 +77,15 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
       showToast("Microphone recording is not supported in this browser", "error");
       return;
     }
+    const attempt = ++internal.startAttempt;
+    set({ phase: "starting" });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (attempt !== internal.startAttempt || get().phase !== "starting") {
+        // Session was discarded/cancelled while waiting for the mic: release this stream.
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       internal.stream = stream;
       internal.chunks = [];
       const recorder = new MediaRecorder(stream);
@@ -119,6 +131,7 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
       }, 250);
       recorder.start();
     } catch {
+      if (attempt !== internal.startAttempt) return;
       showToast("Could not access microphone", "error");
       get().discardSession();
     }
@@ -148,6 +161,7 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
     if (get().phase === "uploading") {
       return;
     }
+    internal.startAttempt += 1;
     const recorder = internal.recorder;
     if (recorder && recorder.state !== "inactive") {
       internal.ignoreNextStop = true;

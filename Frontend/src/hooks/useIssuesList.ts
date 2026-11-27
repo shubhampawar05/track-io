@@ -214,45 +214,36 @@ export function useIssuesList(
     [organizationId, queryClient],
   );
 
+  /** Move one card: a single PATCH (status + sortOrder), optimistic with rollback via refetch. */
   const reorderBoard = useCallback(
-    async (updates: BoardReorderEntry[]) => {
-      if (!organizationId || updates.length === 0) return;
+    async (update: BoardReorderEntry) => {
+      if (!organizationId) return;
       await queryClient.cancelQueries({ queryKey: ["issues", organizationId], exact: false });
 
       queryClient.setQueriesData<Issue[]>(
         { queryKey: ["issues", organizationId], exact: false },
         (old) => {
           if (!old) return old;
-          const u = new Map(updates.map((x) => [x.issueId, x]));
-          const merged = old.map((issue) => {
-            const patch = u.get(issue.id);
-            if (!patch) return issue;
-            return { ...issue, status: patch.status as Issue["status"], sortOrder: patch.sortOrder };
-          });
+          const merged = old.map((issue) =>
+            issue.id === update.issueId
+              ? { ...issue, status: update.status as Issue["status"], sortOrder: update.sortOrder }
+              : issue,
+          );
           return [...merged].sort(compareIssuesBoard);
         },
       );
 
-      const results = await Promise.all(
-        updates.map((row) =>
-          apiJson<Issue>(
-            `/api/projects/${encodeURIComponent(row.projectSlug)}/issues/${encodeURIComponent(row.issueId)}`,
-            { method: "PATCH", body: { status: row.status, sortOrder: row.sortOrder } },
-          ),
-        ),
+      const r = await apiJson<Issue>(
+        `/api/projects/${encodeURIComponent(update.projectSlug)}/issues/${encodeURIComponent(update.issueId)}`,
+        { method: "PATCH", body: { status: update.status, sortOrder: update.sortOrder } },
       );
-      await Promise.all(
-        results.map((r, i) => {
-          const row = updates[i];
-          if (!row || !r.success) return Promise.resolve();
-          return queryClient.invalidateQueries({
-            queryKey: ["issue", organizationId, row.issueId],
-          });
-        }),
-      );
-      const failed = results.some((r) => !r.success);
+      if (r.success) {
+        await queryClient.invalidateQueries({
+          queryKey: ["issue", organizationId, update.issueId],
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ["issues", organizationId], exact: false });
-      if (failed) throw new Error("Reorder failed");
+      if (!r.success) throw new Error(r.error || "Reorder failed");
     },
     [organizationId, queryClient],
   );
@@ -260,6 +251,8 @@ export function useIssuesList(
   return {
     issues: query.data ?? [],
     loading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
     refetch: query.refetch,
     patchStatus,
     reorderBoard,

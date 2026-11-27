@@ -41,14 +41,6 @@ export function buildBoardItemMap(issues: Issue[], columnStatuses: string[]): Re
   return map;
 }
 
-function placementKeyForIssue(issues: Issue[], id: string): string {
-  const issue = issues.find((i) => i.id === id);
-  if (!issue) return "";
-  const same = issues.filter((i) => i.status === issue.status).sort(sortIssuesWithinStatus);
-  const idx = same.findIndex((i) => i.id === id);
-  return `${issue.status}:${idx === -1 ? 0 : idx}`;
-}
-
 export type BoardReorderEntry = {
   issueId: string;
   projectSlug: string;
@@ -56,7 +48,6 @@ export type BoardReorderEntry = {
   sortOrder: number;
 };
 
-/** Diff baseline vs final column ordering; only issues that moved or changed status. */
 export function emptyBoardItemMap(columnStatuses: string[]): Record<string, string[]> {
   return Object.fromEntries(columnStatuses.map((s) => [s, [] as string[]]));
 }
@@ -79,24 +70,45 @@ export function findBoardItemContainer(
   return Object.keys(board).find((key) => board[key].includes(s));
 }
 
-export function computeBoardReorderUpdates(
+/**
+ * Single-PATCH board move: the dragged card gets a sortOrder between its new visible neighbours
+ * (midpoint), `first - 1` / `last + 1` at the column edges, or 0 in an empty column. Other cards
+ * are never rewritten, so the result does not depend on which subset of cards is visible.
+ * Returns `null` when the card did not change column or position.
+ */
+export function computeBoardMoveUpdate(
   baseline: Issue[],
+  baselineMap: Record<string, string[]>,
   finalMap: Record<string, string[]>,
-  columnStatuses: string[],
-): BoardReorderEntry[] {
+  issueId: string,
+): BoardReorderEntry | null {
   const byId = new Map(baseline.map((i) => [i.id, i]));
-  const updates: BoardReorderEntry[] = [];
-  for (const status of columnStatuses) {
-    const ids = finalMap[status] ?? [];
-    ids.forEach((id, sortOrder) => {
-      const nextKey = `${status}:${sortOrder}`;
-      if (placementKeyForIssue(baseline, id) !== nextKey) {
-        const issue = byId.get(id);
-        if (issue?.projectId) {
-          updates.push({ issueId: id, projectSlug: issue.projectId, status, sortOrder });
-        }
-      }
-    });
+  const issue = byId.get(issueId);
+  if (!issue?.projectId) return null;
+  const status = findBoardItemContainer(issueId, finalMap);
+  if (!status) return null;
+  const ids = finalMap[status] ?? [];
+  const idx = ids.indexOf(issueId);
+  if (idx === -1) return null;
+
+  const baselineStatus = findBoardItemContainer(issueId, baselineMap);
+  if (baselineStatus === status && (baselineMap[status] ?? []).indexOf(issueId) === idx) {
+    return null;
   }
-  return updates;
+
+  const orderOf = (id: string | undefined): number | undefined => {
+    if (id == null) return undefined;
+    const o = byId.get(id)?.sortOrder;
+    return typeof o === "number" && Number.isFinite(o) ? o : 0;
+  };
+  const above = orderOf(ids[idx - 1]);
+  const below = orderOf(ids[idx + 1]);
+
+  let sortOrder: number;
+  if (above === undefined && below === undefined) sortOrder = 0;
+  else if (above === undefined) sortOrder = (below as number) - 1;
+  else if (below === undefined) sortOrder = above + 1;
+  else sortOrder = (above + below) / 2;
+
+  return { issueId, projectSlug: issue.projectId, status, sortOrder };
 }

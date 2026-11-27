@@ -88,6 +88,7 @@ export function ExtractTasksModal({
 
   const recording = phase === "capturing";
   const uploadBusy = phase === "uploading";
+  const startingRecording = phase === "starting";
 
   const durationLabel = useMemo(() => formatDuration(durationMs), [durationMs]);
 
@@ -517,12 +518,12 @@ export function ExtractTasksModal({
                       {!recording ? (
                         <button
                           type="button"
-                          disabled={uploadBusy}
+                          disabled={uploadBusy || startingRecording}
                           onClick={() => void startRecording()}
                           className="linear-button-primary flex items-center gap-2"
                         >
                           <Mic className="h-4 w-4" />
-                          Start
+                          {startingRecording ? "Starting…" : "Start"}
                         </button>
                       ) : (
                         <>

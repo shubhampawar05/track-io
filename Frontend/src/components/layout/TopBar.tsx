@@ -187,7 +187,9 @@ export function TopBar() {
                   ? "Processing…"
                   : recordingPhase === "stopped"
                     ? "Recording ready"
-                    : "Recording"}
+                    : recordingPhase === "starting"
+                      ? "Starting…"
+                      : "Recording"}
               </span>
               <span className="tabular-nums text-linear-text-muted shrink-0">
                 {recordingDurationLabel}
