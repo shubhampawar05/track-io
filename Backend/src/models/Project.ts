@@ -14,12 +14,19 @@ const projectSchema = new Schema(
     boardColumns: boardColumnsArrayPath,
     /** When set, `owner/repo` — PR webhooks from this repo auto-link to issues in this org. */
     githubRepoFullName: { type: String, default: "", trim: true },
+    /**
+     * Highest issue number ever allocated in this project. Only ever increases, so deleted
+     * issue keys are never reused. Allocated atomically via `$inc`.
+     */
+    issueSeq: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
 
 projectSchema.index({ organizationId: 1, slug: 1 }, { unique: true });
 projectSchema.index({ organizationId: 1 });
+/** Issue display IDs (`<keyPrefix>-<n>`) must be unique per org, so prefixes must be too. */
+projectSchema.index({ organizationId: 1, keyPrefix: 1 }, { unique: true });
 
 export type ProjectDoc = InferSchemaType<typeof projectSchema> & { _id: mongoose.Types.ObjectId };
 export const Project = mongoose.model("Project", projectSchema);

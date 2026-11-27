@@ -959,14 +959,29 @@ export async function patchIssueUnderProject(
   );
 }
 
-async function nextIssueNumber(
+/**
+ * Atomically allocates the next issue number for a project.
+ * `$max` first lifts the counter to the highest existing number (covers projects created before
+ * the counter existed, seed data and starter issues); `$inc` then hands out a unique value even
+ * under concurrent creates. The counter never decreases, so deleted issue keys are not reused.
+ */
+export async function nextIssueNumber(
   projectId: mongoose.Types.ObjectId,
 ): Promise<number> {
   const last = await Issue.findOne({ projectId })
     .sort({ number: -1 })
     .select("number")
     .lean();
-  return last ? last.number + 1 : 1;
+  if (last) {
+    await Project.updateOne({ _id: projectId }, { $max: { issueSeq: last.number } });
+  }
+  const updated = await Project.findOneAndUpdate(
+    { _id: projectId },
+    { $inc: { issueSeq: 1 } },
+    { new: true, projection: { issueSeq: 1 } },
+  ).lean();
+  if (!updated) throw new HttpError(404, "Project not found");
+  return updated.issueSeq;
 }
 
 function resolveCreateAssigneeId(

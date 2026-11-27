@@ -6,6 +6,12 @@ import * as inviteService from "../services/invite.service";
 import * as passwordResetService from "../services/passwordReset.service";
 import { fail, ok } from "../types/api";
 import { COOKIE_NAME, signToken } from "../utils/jwt";
+import { User } from "../models/User";
+
+async function sessionTokenFor(userId: string): Promise<string> {
+  const user = await User.findById(userId).select("tokenVersion").lean();
+  return signToken(userId, user?.tokenVersion ?? 0);
+}
 
 /** Shared shape for set + clear so browsers drop the cookie reliably. */
 function authCookieBase() {
@@ -50,7 +56,7 @@ export async function login(req: Request, res: Response) {
       email: String(body.email ?? ""),
       password: String(body.password ?? ""),
     });
-    res.cookie(COOKIE_NAME, signToken(data.id), authCookieOptions());
+    res.cookie(COOKIE_NAME, await sessionTokenFor(data.id), authCookieOptions());
     res.json(ok(data));
   } catch (e) {
     if (e instanceof HttpError) {
@@ -69,7 +75,7 @@ export async function register(req: Request, res: Response) {
       email: String(body.email ?? ""),
       password: String(body.password ?? ""),
     });
-    res.cookie(COOKIE_NAME, signToken(data.id), authCookieOptions());
+    res.cookie(COOKIE_NAME, await sessionTokenFor(data.id), authCookieOptions());
     res.json(ok(data));
   } catch (e) {
     if (e instanceof HttpError) {
@@ -94,7 +100,13 @@ export async function patchMe(req: Request, res: Response) {
   }
 }
 
-export async function logout(_req: Request, res: Response) {
+/** Clears the cookie and revokes every session of the user (works with an expired/invalid cookie too). */
+export async function logout(req: Request, res: Response) {
+  try {
+    if (req.userId) await User.updateOne({ _id: req.userId }, { $inc: { tokenVersion: 1 } });
+  } catch (err) {
+    console.error("Failed to revoke sessions on logout", err);
+  }
   res.clearCookie(COOKIE_NAME, authCookieBase());
   res.json(ok(true));
 }

@@ -65,48 +65,79 @@ export async function listProjects(organizationId: mongoose.Types.ObjectId, user
   return list.map(toCard);
 }
 
-export async function createProject(organizationId: mongoose.Types.ObjectId, userId: string, nameRaw: string): Promise<ProjectCardDto> {
-  const name = nameRaw.trim();
-  if (!name) throw new HttpError(400, "Invalid input");
-  const base = slugifyName(name);
+function isDuplicateKeyError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: number }).code === 11000;
+}
+
+async function findFreeSlug(organizationId: mongoose.Types.ObjectId, base: string): Promise<string> {
   let slug = base;
   let n = 0;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const clash = await Project.findOne({ organizationId, slug }).lean();
-    if (!clash) break;
+  while (await Project.exists({ organizationId, slug })) {
     n += 1;
     slug = `${base}-${n}`;
   }
-  let keyPrefix = keyPrefixFromName(name);
+  return slug;
+}
+
+async function findFreeKeyPrefix(organizationId: mongoose.Types.ObjectId, name: string): Promise<string> {
+  const base = keyPrefixFromName(name);
+  let keyPrefix = base;
   let suffix = 0;
   while (await Project.exists({ organizationId, keyPrefix })) {
     suffix += 1;
-    keyPrefix = `${keyPrefixFromName(name).slice(0, 2)}${suffix}`;
+    keyPrefix = `${base.slice(0, 2)}${suffix}`;
   }
-  const count = await Project.countDocuments({ organizationId });
+  return keyPrefix;
+}
+
+/** Retries when a concurrent create claims the same slug or key prefix (unique indexes). */
+const CREATE_PROJECT_MAX_ATTEMPTS = 10;
+
+/** Random back-off so colliding requests stop picking the same candidate in lockstep. */
+function retryJitter(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 5 + Math.floor(Math.random() * 45)));
+}
+
+export async function createProject(organizationId: mongoose.Types.ObjectId, userId: string, nameRaw: string): Promise<ProjectCardDto> {
+  const name = nameRaw.trim();
+  if (!name) throw new HttpError(400, "Invalid input");
   const uid = new mongoose.Types.ObjectId(userId);
   const memberships = await Membership.find({ organizationId }).select("userId").lean();
   let memberIds = memberships.map((m) => m.userId as mongoose.Types.ObjectId);
   if (!memberIds.some((id) => id.equals(uid))) {
     memberIds = [...memberIds, uid];
   }
-  const p = await Project.create({
-    organizationId,
-    slug,
-    name,
-    keyPrefix,
-    color: COLORS[count % COLORS.length],
-    status: "Active",
-    progress: 0,
-    memberIds,
-  });
 
-  if (process.env.SKIP_STARTER_ISSUES !== "true") {
-    await createStarterIssues(organizationId, p._id, keyPrefix, uid);
+  for (let attempt = 1; ; attempt += 1) {
+    const slug = await findFreeSlug(organizationId, slugifyName(name));
+    const keyPrefix = await findFreeKeyPrefix(organizationId, name);
+    const count = await Project.countDocuments({ organizationId });
+    let p;
+    try {
+      p = await Project.create({
+        organizationId,
+        slug,
+        name,
+        keyPrefix,
+        color: COLORS[count % COLORS.length],
+        status: "Active",
+        progress: 0,
+        memberIds,
+      });
+    } catch (err) {
+      if (isDuplicateKeyError(err) && attempt < CREATE_PROJECT_MAX_ATTEMPTS) {
+        await retryJitter();
+        continue;
+      }
+      if (isDuplicateKeyError(err)) throw new HttpError(409, "Project name is busy, please try again");
+      throw err;
+    }
+
+    if (process.env.SKIP_STARTER_ISSUES !== "true") {
+      await createStarterIssues(organizationId, p._id, keyPrefix, uid);
+    }
+    return toCard(p.toObject());
   }
-
-  return toCard(p.toObject());
 }
 
 const STARTER_ISSUES: {
