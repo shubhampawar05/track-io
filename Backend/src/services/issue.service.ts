@@ -254,14 +254,22 @@ async function assertAttachmentUrlsOwnedByOrganization(
   }
 }
 
-/** True when the URL is still attached to any issue or comment in the organization. */
-async function isAttachmentUrlStillReferenced(
+/**
+ * True when the GridFS file is still used anywhere in the organization: as an issue or comment
+ * attachment (relative or absolute URL form) or embedded in an issue description.
+ */
+async function isAttachmentFileStillReferenced(
   organizationId: mongoose.Types.ObjectId,
-  url: string,
+  gridId: mongoose.Types.ObjectId,
 ): Promise<boolean> {
+  // ObjectId hex is [0-9a-f]{24}, so it is safe to interpolate into the pattern.
+  const filePath = new RegExp(`/api/uploads/files/${gridId.toHexString()}(?![0-9a-f])`);
   const [onIssue, onComment] = await Promise.all([
-    Issue.exists({ organizationId, "attachments.url": url }),
-    Comment.exists({ organizationId, "attachments.url": url }),
+    Issue.exists({
+      organizationId,
+      $or: [{ "attachments.url": filePath }, { description: filePath }],
+    }),
+    Comment.exists({ organizationId, "attachments.url": filePath }),
   ]);
   return Boolean(onIssue || onComment);
 }
@@ -1213,7 +1221,7 @@ export async function removeAttachment(
       // Only delete the stored file when it belongs to this organization and nothing else uses it.
       const meta = await getAttachmentFileMeta(gridId);
       const ownedByOrg = Boolean(meta?.organizationId.equals(organizationId));
-      if (!ownedByOrg || (await isAttachmentUrlStillReferenced(organizationId, removed.url))) {
+      if (!ownedByOrg || (await isAttachmentFileStillReferenced(organizationId, gridId))) {
         return;
       }
       await deleteAttachmentFromGridFs(gridId);

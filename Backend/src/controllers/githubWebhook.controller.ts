@@ -5,11 +5,13 @@ export async function postGithubWebhook(req: Request, res: Response) {
   try {
     // Express already decodes route params; decoding again throws URIError on inputs like "%25".
     const token = String(req.params.webhookPathToken ?? "");
-    if (!(req.body instanceof Buffer)) {
+    const isJson = Boolean(req.is("application/json"));
+    if (!isJson) {
       res.status(415).json({ ok: false, error: "Webhook content type must be application/json" });
       return;
     }
-    const raw = req.body;
+    // body-parser leaves req.body undefined for an empty body; let signature verification reject it.
+    const raw = req.body instanceof Buffer ? req.body : Buffer.alloc(0);
     const sig = typeof req.headers["x-hub-signature-256"] === "string" ? req.headers["x-hub-signature-256"] : undefined;
     const event = typeof req.headers["x-github-event"] === "string" ? req.headers["x-github-event"] : undefined;
     const result = await githubWebhookService.handleGithubWebhook(token, raw, sig, event);
