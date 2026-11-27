@@ -3,6 +3,12 @@ import { createApp } from "./app";
 import { env } from "./config/env";
 import { publicApiBase } from "./utils/uploadUrl";
 
+// Backstop: a stray rejected promise from a route handler must not take the whole API down.
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error("Unhandled promise rejection", reason);
+});
+
 async function main() {
   await mongoose.connect(env.MONGODB_URI);
   const app = createApp();

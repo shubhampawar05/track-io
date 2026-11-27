@@ -7,7 +7,7 @@ import type { IssueDoc } from "../models/Issue";
 import { Project } from "../models/Project";
 import { User } from "../models/User";
 import { formatRelative } from "../utils/formatRelative";
-import { deleteAttachmentFromGridFs } from "./attachmentStorage.service";
+import { deleteAttachmentFromGridFs, getAttachmentFileMeta } from "./attachmentStorage.service";
 import { attachmentGridFsIdFromTrustedUrl, isTrustedUploadUrl } from "../utils/uploadUrl";
 import { assertProjectMember } from "./project.service";
 import { isValidStatusSlug } from "../utils/boardColumns";
@@ -234,6 +234,36 @@ function normalizeAttachmentsInput(raw: unknown): {
     out.push({ id, filename, size, mimeType, url });
   }
   return out;
+}
+
+/**
+ * Upload URLs only prove a file lives in this API's GridFS bucket, not who owns it.
+ * Reject any file that was not uploaded into the caller's organization.
+ */
+async function assertAttachmentUrlsOwnedByOrganization(
+  organizationId: mongoose.Types.ObjectId,
+  urls: string[],
+): Promise<void> {
+  for (const url of urls) {
+    const gridId = attachmentGridFsIdFromTrustedUrl(url);
+    if (!gridId) throw new HttpError(400, "Invalid attachment URL");
+    const meta = await getAttachmentFileMeta(gridId);
+    if (!meta || !meta.organizationId.equals(organizationId)) {
+      throw new HttpError(400, "Invalid attachment URL");
+    }
+  }
+}
+
+/** True when the URL is still attached to any issue or comment in the organization. */
+async function isAttachmentUrlStillReferenced(
+  organizationId: mongoose.Types.ObjectId,
+  url: string,
+): Promise<boolean> {
+  const [onIssue, onComment] = await Promise.all([
+    Issue.exists({ organizationId, "attachments.url": url }),
+    Comment.exists({ organizationId, "attachments.url": url }),
+  ]);
+  return Boolean(onIssue || onComment);
 }
 
 export type GithubLinkDto = {
@@ -1074,6 +1104,10 @@ export async function addComment(
   if (!content && attachments.length === 0)
     throw new HttpError(400, "Invalid input");
   await loadIssueForUser(organizationId, userId, displayId);
+  await assertAttachmentUrlsOwnedByOrganization(
+    organizationId,
+    attachments.map((a) => a.url),
+  );
   const full = await Issue.findOne({ organizationId, displayId });
   if (!full) throw new HttpError(404, "Issue not found");
   const storedContent =
@@ -1143,6 +1177,7 @@ export async function addAttachment(
   if (!trimmedUrl || !isTrustedUploadUrl(trimmedUrl)) {
     throw new HttpError(400, "Invalid attachment URL");
   }
+  await assertAttachmentUrlsOwnedByOrganization(organizationId, [trimmedUrl]);
   const url = trimmedUrl;
   const at = {
     id: `att-${randomUUID()}`,
@@ -1175,6 +1210,12 @@ export async function removeAttachment(
   await full.save();
   if (gridId) {
     try {
+      // Only delete the stored file when it belongs to this organization and nothing else uses it.
+      const meta = await getAttachmentFileMeta(gridId);
+      const ownedByOrg = Boolean(meta?.organizationId.equals(organizationId));
+      if (!ownedByOrg || (await isAttachmentUrlStillReferenced(organizationId, removed.url))) {
+        return;
+      }
       await deleteAttachmentFromGridFs(gridId);
     } catch (e) {
       console.error("Attachment GridFS delete failed", e);

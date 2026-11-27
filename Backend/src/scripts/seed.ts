@@ -14,6 +14,7 @@ import "dotenv/config";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import { assertSafeDatabaseTarget } from "./dbGuard";
 import { env } from "../config/env";
 import { Comment } from "../models/Comment";
 import { GithubIntegration } from "../models/GithubIntegration";
@@ -43,6 +44,7 @@ if (!rawUri) {
   process.exit(1);
 }
 const uri = rawUri;
+assertSafeDatabaseTarget(uri, "seed");
 
 type SeedUser = { email: string; name: string };
 
