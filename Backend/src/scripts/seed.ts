@@ -27,6 +27,7 @@ import { Sprint } from "../models/Sprint";
 import { TranscriptionRecording } from "../models/TranscriptionRecording";
 import { User } from "../models/User";
 import { encryptGithubAccessToken } from "../utils/githubTokenCrypto";
+import { sealSecret } from "../utils/secretBox";
 import { initialsFromName } from "../utils/initials";
 import { hashToken } from "../utils/tokenCrypto";
 
@@ -488,7 +489,7 @@ async function main() {
     ownerId: demo._id,
     issuesBoardColumns: [...ORG_ISSUES_BOARD_COLUMNS],
     githubWebhookPathToken: webhookPathToken,
-    githubWebhookSecret: webhookSecret,
+    githubWebhookSecret: sealSecret(webhookSecret),
   });
 
   await Membership.create({ userId: demo._id, organizationId: org._id, role: "owner" });

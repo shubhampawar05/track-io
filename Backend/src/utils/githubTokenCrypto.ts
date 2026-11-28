@@ -1,40 +1,31 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
-import { env } from "../config/env";
+import { isSealed, openLegacyGithubToken, openSecret, sealSecret } from "./secretBox";
 
-const ALGO = "aes-256-gcm";
-const IV_LENGTH = 12;
+/** Fields of a GithubIntegration document that hold the access token (v2 or legacy format). */
+export type StoredGithubToken = {
+  sealedAccessToken?: string | null;
+  encryptedAccessToken?: string | null;
+  tokenIv?: string | null;
+  tokenAuthTag?: string | null;
+};
 
-function keyBuf(): Buffer {
-  const raw = env.GITHUB_OAUTH_ENCRYPTION_KEY;
-  if (raw.length >= 16) return createHash("sha256").update(raw, "utf8").digest();
-  return createHash("sha256").update(env.JWT_SECRET, "utf8").digest();
+/** Encrypts a GitHub access token for storage (v2 sealed format). */
+export function encryptGithubAccessToken(plain: string): { sealedAccessToken: string } {
+  return { sealedAccessToken: sealSecret(plain) };
 }
 
-export function encryptGithubAccessToken(plain: string): {
-  encryptedAccessToken: string;
-  tokenIv: string;
-  tokenAuthTag: string;
-} {
-  const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGO, keyBuf(), iv);
-  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  const authTag = cipher.getAuthTag();
+/** Decrypts a stored token in either the v2 or the legacy format. Throws SecretUnavailableError. */
+export function decryptGithubAccessToken(doc: StoredGithubToken): string {
+  if (isSealed(doc.sealedAccessToken)) return openSecret(doc.sealedAccessToken);
+  if (doc.encryptedAccessToken && doc.tokenIv && doc.tokenAuthTag) {
+    return openLegacyGithubToken(doc.encryptedAccessToken, doc.tokenIv, doc.tokenAuthTag);
+  }
+  throw new Error("GitHub integration has no stored token");
+}
+
+/** Mongo update that stores a token in the v2 format and drops the legacy fields. */
+export function githubTokenUpdate(plain: string) {
   return {
-    encryptedAccessToken: enc.toString("base64"),
-    tokenIv: iv.toString("base64"),
-    tokenAuthTag: authTag.toString("base64"),
+    $set: encryptGithubAccessToken(plain),
+    $unset: { encryptedAccessToken: 1, tokenIv: 1, tokenAuthTag: 1 },
   };
-}
-
-export function decryptGithubAccessToken(
-  encryptedAccessToken: string,
-  tokenIv: string,
-  tokenAuthTag: string,
-): string {
-  const decipher = createDecipheriv(ALGO, keyBuf(), Buffer.from(tokenIv, "base64"));
-  decipher.setAuthTag(Buffer.from(tokenAuthTag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedAccessToken, "base64")),
-    decipher.final(),
-  ]).toString("utf8");
 }

@@ -9,7 +9,7 @@
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
-function parseMongoUri(uri: string): { hosts: string[]; isSrv: boolean; databaseName: string } {
+export function parseMongoUri(uri: string): { hosts: string[]; isSrv: boolean; databaseName: string } {
   const match = /^mongodb(\+srv)?:\/\/(?:[^@/]*@)?([^/?]+)(?:\/([^?]*))?/i.exec(uri.trim());
   if (!match) throw new Error("MONGODB_URI is not a valid mongodb:// or mongodb+srv:// connection string");
   const hosts = match[2]!

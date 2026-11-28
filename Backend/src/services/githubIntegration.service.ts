@@ -6,7 +6,7 @@ import { HttpError } from "../middleware/errorHandler";
 import { GithubIntegration } from "../models/GithubIntegration";
 import { Membership } from "../models/Membership";
 import { Organization } from "../models/Organization";
-import { encryptGithubAccessToken } from "../utils/githubTokenCrypto";
+import { githubTokenUpdate } from "../utils/githubTokenCrypto";
 import { publicApiBase } from "../utils/uploadUrl";
 
 const GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize";
@@ -156,15 +156,18 @@ export async function completeGithubOAuth(
     throw new HttpError(400, "GitHub user fetch failed");
   }
 
-  const enc = encryptGithubAccessToken(tokenJson.access_token);
+  const tokenUpdate = githubTokenUpdate(tokenJson.access_token);
   await GithubIntegration.findOneAndUpdate(
     { organizationId },
     {
-      organizationId,
-      ...enc,
-      githubUserId: String(ghUser.id),
-      githubLogin: ghUser.login,
-      scope: tokenJson.scope ?? OAUTH_SCOPE,
+      $set: {
+        organizationId,
+        ...tokenUpdate.$set,
+        githubUserId: String(ghUser.id),
+        githubLogin: ghUser.login,
+        scope: tokenJson.scope ?? OAUTH_SCOPE,
+      },
+      $unset: tokenUpdate.$unset,
     },
     { upsert: true, new: true },
   );
