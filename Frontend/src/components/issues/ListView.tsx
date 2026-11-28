@@ -105,8 +105,11 @@ export function ListView({
   issueNavFrom = "list",
   issueNavProjectView = "list",
   appliedPipelineFilters,
+  totalCount,
 }: {
   issues: Issue[];
+  /** Server-side match count; a notice is shown when it exceeds `issues.length`. */
+  totalCount?: number;
   loading?: boolean;
   /** Load failure for `issues`; renders an error state instead of the empty state. */
   error?: unknown;
@@ -168,6 +171,7 @@ export function ListView({
         {!embedded && appliedPipelineFilters ? (
           <IssuePipelineFilterChipsRow applied={appliedPipelineFilters} />
         ) : null}
+        <IssueListTruncatedNotice shown={issues.length} total={totalCount} />
         <div
           className="flex items-center gap-4 text-sm text-linear-text-muted pb-2"
           role="tablist"
@@ -281,6 +285,20 @@ const PRIORITY_CHIP_LABEL: Record<string, string> = {
   low: "Low",
   none: "No Priority",
 };
+
+/** Shown when the workspace has more matching issues than were loaded (very large workspaces). */
+export function IssueListTruncatedNotice({ shown, total }: { shown: number; total?: number }) {
+  if (!total || total <= shown) return null;
+  return (
+    <p
+      role="status"
+      className="mb-4 rounded-md border border-(--border) px-3 py-2 text-xs text-linear-text-muted"
+    >
+      Showing the {shown.toLocaleString()} most recently updated of {total.toLocaleString()} issues. Use
+      Filters to narrow the list.
+    </p>
+  );
+}
 
 export function IssuePipelineFilterChipsRow({
   applied,

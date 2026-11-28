@@ -61,14 +61,10 @@ function AcceptInviteContent() {
   const switchAccount = async () => {
     if (busy) return;
     setBusy(true);
-    try {
-      await logout();
-    } catch {
-      // logout() always clears local session state; a server failure is fine here.
-    } finally {
-      queryClient.clear();
-      setBusy(false);
-    }
+    // logout() always clears local session state; a server failure is fine here.
+    await logout();
+    queryClient.clear();
+    setBusy(false);
     router.push(loginHref);
   };
 

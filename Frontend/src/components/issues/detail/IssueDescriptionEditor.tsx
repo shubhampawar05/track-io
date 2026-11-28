@@ -209,7 +209,10 @@ export const IssueDescriptionEditor = forwardRef<
       const file = input.files?.[0];
       if (!file || !editor) return;
       const r = await apiUploadFile(file);
-      if (!r.success) return;
+      if (!r.success) {
+        useUIStore.getState().showToast(r.error || "Could not upload the image", "error");
+        return;
+      }
       const u = r.data.url;
       const src = u.startsWith("http") ? u : `${apiBaseUrl()}${u.startsWith("/") ? u : `/${u}`}`;
       editor.chain().focus().setImage({ src }).run();

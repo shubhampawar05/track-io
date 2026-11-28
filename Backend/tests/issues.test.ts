@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LIMITS } from "../src/utils/inputLimits";
 import { as, createIssue, createProject, registerUser, startApp, stopApp, uploadPng, type TestUser } from "./helpers";
 
 let app: Express;
@@ -92,6 +93,33 @@ describe("org-wide list", () => {
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(Number(res.headers["x-total-count"])).toBe(res.body.data.length);
     expect(res.headers["x-results-truncated"]).toBe("false");
+    expect(res.headers["x-next-offset"]).toBeUndefined();
+  });
+
+  it("pages with limit/offset without overlap or gaps", async () => {
+    const all = await as(app, user).get("/api/issues");
+    const total = Number(all.headers["x-total-count"]);
+    expect(total).toBeGreaterThan(5);
+    const seen: string[] = [];
+    let offset: number | null = 0;
+    while (offset !== null) {
+      const page = await as(app, user).get(`/api/issues?limit=3&offset=${offset}`);
+      expect(page.status).toBe(200);
+      expect(page.body.data.length).toBeLessThanOrEqual(3);
+      expect(Number(page.headers["x-total-count"])).toBe(total);
+      seen.push(...page.body.data.map((i: { id: string }) => i.id));
+      const next = page.headers["x-next-offset"];
+      expect(page.headers["x-results-truncated"]).toBe(next ? "true" : "false");
+      offset = next ? Number(next) : null;
+    }
+    expect(new Set(seen).size).toBe(total);
+    expect(new Set(seen)).toEqual(new Set(all.body.data.map((i: { id: string }) => i.id)));
+  });
+
+  it("clamps invalid paging params", async () => {
+    const res = await as(app, user).get("/api/issues?limit=abc&offset=-5");
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(Number(res.headers["x-total-count"]));
   });
 });
 
@@ -133,5 +161,20 @@ describe("subtasks and deletion", () => {
       .patch(`/api/issues/${parent}`)
       .send({ subtasks: [{ id: "s1", title: "old", done: true, linkedIssueId: "GAM-99999" }, { id: "s2", title: "new", done: false, linkedIssueId: "GAM-88888" }] });
     expect(bad.status).toBe(400);
+  });
+});
+
+describe("input size limits", () => {
+  it("accepts a description at the maximum length (JSON body limit is large enough)", async () => {
+    // Worst case for body size: multi-byte characters plus quotes that JSON must escape.
+    const description = "é\"".repeat(LIMITS.issueDescription / 2);
+    const res = await as(app, user).post(`/api/projects/${slug}/issues`).send({ title: "big", description });
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a description over the limit with 400, not 413", async () => {
+    const description = "a".repeat(LIMITS.issueDescription + 1);
+    const res = await as(app, user).post(`/api/projects/${slug}/issues`).send({ title: "too big", description });
+    expect(res.status).toBe(400);
   });
 });

@@ -4,12 +4,13 @@ import { BoardView } from "@/components/issues/BoardView";
 import { useIssuesList } from "@/hooks/useIssuesList";
 
 export default function IssuesBoardPage() {
-  const { issues, loading, isError, error, refetch, reorderBoard, appliedPipelineFilters } = useIssuesList(null, {
+  const { issues, totalCount, loading, isError, error, refetch, reorderBoard, appliedPipelineFilters } = useIssuesList(null, {
     applyPipelineFilters: true,
   });
   return (
     <BoardView
       issues={issues}
+      totalCount={totalCount}
       loading={loading}
       error={isError ? error : null}
       onRetry={() => void refetch()}

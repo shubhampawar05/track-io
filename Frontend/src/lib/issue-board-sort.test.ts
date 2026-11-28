@@ -77,6 +77,14 @@ describe("buildBoardItemMap", () => {
   });
 });
 
+describe("numeric key tie-break", () => {
+  it("orders tied cards ABC-9 before ABC-10, matching the backend issue-number order", () => {
+    const tied = [issue("abc-10", "todo", 5), issue("abc-9", "todo", 5)];
+    expect(buildBoardItemMap(tied, ["todo"]).todo).toEqual(["abc-9", "abc-10"]);
+    expect([...tied].sort(compareIssuesBoard).map((i) => i.id)).toEqual(["abc-9", "abc-10"]);
+  });
+});
+
 describe("emptyBoardItemMap / cloneBoardItemMap", () => {
   it("creates an empty list per column", () => {
     expect(emptyBoardItemMap(["todo", "done"])).toEqual({ todo: [], done: [] });

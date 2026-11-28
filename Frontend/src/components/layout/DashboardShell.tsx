@@ -14,7 +14,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const hydrated = useAuthStore((s) => s.hydrated);
 
   useEffect(() => {
-    if (hydrated && !user) router.replace("/");
+    if (!hydrated || user) return;
+    // Keep the deep link so sign-in returns here (e.g. an issue link opened while signed out).
+    const here = `${window.location.pathname}${window.location.search}`;
+    router.replace(`/?next=${encodeURIComponent(here)}`);
   }, [hydrated, user, router]);
 
   if (!hydrated) {

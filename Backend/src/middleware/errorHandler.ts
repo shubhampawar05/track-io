@@ -41,6 +41,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     res.status(clientStatus).json(fail(CLIENT_ERROR_MESSAGES[clientStatus] ?? "Invalid request"));
     return;
   }
+  // eslint-disable-next-line no-console
   console.error(`Unhandled error on ${req.method} ${req.path}`, err);
   res.status(500).json(fail("Something went wrong"));
 }

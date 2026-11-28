@@ -21,6 +21,7 @@ export async function postGithubWebhook(req: Request, res: Response) {
     }
     res.status(200).json({ ok: true });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("GitHub webhook handling failed", err);
     if (!res.headersSent) res.status(500).json({ ok: false, error: "Something went wrong" });
   }

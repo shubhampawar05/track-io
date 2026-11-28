@@ -1,7 +1,6 @@
 import { toFile } from "openai/uploads";
 import { env } from "../config/env";
 import { HttpError } from "../middleware/errorHandler";
-import { __setOpenAiClientForTests } from "./transcriptionLlm.service";
 import OpenAI from "openai";
 
 let client: OpenAI | null = null;
@@ -16,11 +15,6 @@ function openAiClient(): OpenAI {
   }
   client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
   return client;
-}
-
-export function __setAudioTranscriberClientForTests(mockClient: OpenAI | null) {
-  client = mockClient;
-  __setOpenAiClientForTests(mockClient);
 }
 
 export async function transcribeAudioBuffer(input: {
@@ -45,6 +39,7 @@ export async function transcribeAudioBuffer(input: {
     if (e?.status === 401) throw new HttpError(502, "OpenAI authentication failed. Check OPENAI_API_KEY.");
     if (e?.status === 429) throw new HttpError(502, "OpenAI rate limit or quota exceeded.");
     // Keep upstream details in server logs only; clients get a generic message.
+    // eslint-disable-next-line no-console
     console.error("OpenAI audio transcription failed", e?.status, e?.message);
     throw new HttpError(502, "Failed to transcribe recording");
   }

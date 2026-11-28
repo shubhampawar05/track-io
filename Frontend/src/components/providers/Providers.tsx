@@ -24,7 +24,7 @@ function AppToastHost() {
   );
 }
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, nonce }: { children: React.ReactNode; nonce?: string }) {
   return (
     <QueryProvider>
       <ThemeProvider
@@ -32,6 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
+        nonce={nonce}
       >
         <AuthHydrator />
         {children}

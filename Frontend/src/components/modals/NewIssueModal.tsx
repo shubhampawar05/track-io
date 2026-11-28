@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
 import { useProjectDetail } from "@/hooks/useProjectDetail";
+import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   dismissNewIssueGuide,
   isNewIssueGuideDismissed,
@@ -280,6 +281,9 @@ function NewIssueModalContent({
     resolveAssigneeIdForSubmit,
   ]);
 
+  // Focus trap + focus restore; Escape and ⌘/Ctrl+Enter are handled below.
+  const dialogRef = useModalDialog(isPresent, null);
+
   useEffect(() => {
     if (!isPresent) return;
     const onKey = (e: KeyboardEvent) => {
@@ -347,6 +351,7 @@ function NewIssueModalContent({
         initial={{ opacity: 0, scale: 0.98, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98, y: 20 }}
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-issue-title"

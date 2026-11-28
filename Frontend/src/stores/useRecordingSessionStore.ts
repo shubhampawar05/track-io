@@ -61,7 +61,7 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
   audioBlob: null,
 
   tickDuration: () => {
-    if (get().phase !== "capturing" || internal.startedAtMs == null) return;
+    if (get().phase !== "capturing" || get().isPaused || internal.startedAtMs == null) return;
     set({ durationMs: Date.now() - internal.startedAtMs });
   },
 
@@ -142,9 +142,12 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
     if (!recorder || get().phase !== "capturing") return;
     if (recorder.state === "recording") {
       recorder.pause();
+      // Freeze the elapsed time so paused seconds are neither shown nor uploaded as duration.
+      if (internal.startedAtMs != null) set({ durationMs: Date.now() - internal.startedAtMs });
       set({ isPaused: true });
     } else if (recorder.state === "paused") {
       recorder.resume();
+      internal.startedAtMs = Date.now() - get().durationMs;
       set({ isPaused: false });
     }
   },
@@ -152,6 +155,8 @@ export const useRecordingSessionStore = create<RecordingSessionState>((set, get)
   stopRecording: () => {
     const recorder = internal.recorder;
     if (!recorder || get().phase !== "capturing") return;
+    // Final duration: exact when running; already frozen at the pause point when paused.
+    if (!get().isPaused && internal.startedAtMs != null) set({ durationMs: Date.now() - internal.startedAtMs });
     if (recorder.state !== "inactive") recorder.stop();
     clearTimer();
     internal.startedAtMs = null;

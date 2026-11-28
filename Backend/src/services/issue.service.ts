@@ -776,18 +776,40 @@ async function projectIdsForUser(
   return projects.map((p) => p._id);
 }
 
-/** Max issues returned by the org-wide list; beyond this the oldest-updated issues are left out. */
+/** Max (and default) page size of the org-wide list. Clients follow `nextOffset` for more. */
 export const ORG_ISSUE_LIST_LIMIT = 1000;
 
-export type OrgIssueListResult = { issues: IssueListDto[]; total: number; truncated: boolean };
+export type IssueListPage = { limit: number; offset: number };
+
+/** Parses `?limit=&offset=`; out-of-range or non-numeric values fall back to safe bounds. */
+export function parseIssueListPage(raw: Record<string, unknown>): IssueListPage {
+  const num = (key: string) => {
+    const n = Number(firstQueryValue(raw[key]));
+    return Number.isFinite(n) ? Math.floor(n) : NaN;
+  };
+  const limit = num("limit");
+  const offset = num("offset");
+  return {
+    limit: limit >= 1 ? Math.min(limit, ORG_ISSUE_LIST_LIMIT) : ORG_ISSUE_LIST_LIMIT,
+    offset: offset >= 0 ? offset : 0,
+  };
+}
+
+export type OrgIssueListResult = {
+  issues: IssueListDto[];
+  total: number;
+  /** Offset of the next page, or null when this page reached the end. */
+  nextOffset: number | null;
+};
 
 export async function listAllIssues(
   organizationId: mongoose.Types.ObjectId,
   userId: string,
   query?: IssueListQueryParams,
+  page: IssueListPage = { limit: ORG_ISSUE_LIST_LIMIT, offset: 0 },
 ): Promise<OrgIssueListResult> {
   const pids = await projectIdsForUser(organizationId, userId);
-  if (pids.length === 0) return { issues: [], total: 0, truncated: false };
+  if (pids.length === 0) return { issues: [], total: 0, nextOffset: null };
   const filterParts: Record<string, unknown>[] = [
     { organizationId },
     { projectId: { $in: pids } },
@@ -795,14 +817,19 @@ export async function listAllIssues(
   ];
   const filter =
     filterParts.length === 1 ? filterParts[0]! : { $and: filterParts };
-  // Sort in the database before limiting so truncation is deterministic (most recently
-  // updated issues win) instead of whichever documents MongoDB happens to return first.
+  // Stable database order (most recently updated first) so pages don't overlap or skip;
+  // each page is then re-sorted for display below.
   const rows = await Issue.find(filter)
     .sort({ updatedAt: -1, _id: -1 })
-    .limit(ORG_ISSUE_LIST_LIMIT)
+    .skip(page.offset)
+    .limit(page.limit)
     .lean();
-  const truncated = rows.length === ORG_ISSUE_LIST_LIMIT;
-  const total = truncated ? await Issue.countDocuments(filter) : rows.length;
+  const total =
+    page.offset === 0 && rows.length < page.limit
+      ? rows.length
+      : await Issue.countDocuments(filter);
+  const end = page.offset + rows.length;
+  const nextOffset = rows.length === page.limit && end < total ? end : null;
   const projects = await Project.find({
     _id: { $in: rows.map((r) => r.projectId) },
   })
@@ -823,7 +850,7 @@ export async function listAllIssues(
     if (!p) continue;
     out.push(await toListDto(row as unknown as IssueDoc, p, userMap));
   }
-  return { issues: out, total, truncated: truncated && total > out.length };
+  return { issues: out, total, nextOffset };
 }
 
 export async function listProjectIssues(
@@ -1200,6 +1227,11 @@ export async function deleteIssue(
   const issueAttachmentUrls = (
     ((issue as unknown as { attachments?: { url?: string }[] }).attachments ?? [])
   ).map((a) => a.url ?? "");
+  // Images pasted into the description are stored files too.
+  const descriptionFileUrls =
+    String((issue as unknown as { description?: string }).description ?? "").match(
+      /\/api\/uploads\/files\/[a-f0-9]{24}/gi,
+    ) ?? [];
   const comments = await Comment.find({ issueId: oid, organizationId }).select("attachments").lean();
   const commentAttachmentUrls = comments.flatMap((c) =>
     ((c as { attachments?: { url?: string }[] }).attachments ?? []).map((a) => a.url ?? ""),
@@ -1215,6 +1247,7 @@ export async function deleteIssue(
   );
   await deleteUnreferencedAttachmentFiles(organizationId, [
     ...issueAttachmentUrls,
+    ...descriptionFileUrls,
     ...commentAttachmentUrls,
   ]);
 }
@@ -1236,6 +1269,7 @@ async function deleteUnreferencedAttachmentFiles(
       if (await isAttachmentFileStillReferenced(organizationId, gridId)) continue;
       await deleteAttachmentFromGridFs(gridId);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("Attachment cleanup after issue delete failed", e);
     }
   }
@@ -1369,6 +1403,7 @@ export async function removeAttachment(
       }
       await deleteAttachmentFromGridFs(gridId);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("Attachment GridFS delete failed", e);
     }
   }

@@ -66,6 +66,18 @@ describe("attachment reference counting", () => {
     expect(await fileStatus(url)).toBe(200);
   });
 
+  it("deletes description-embedded files with their issue unless another issue still uses them", async () => {
+    const own = await uploadPng(app, user);
+    const shared = await uploadPng(app, user);
+    const doomed = await createIssue(app, user, slug, {
+      description: `<p><img src="${own}"><img src="http://127.0.0.1:4999${shared}"></p>`,
+    });
+    await createIssue(app, user, slug, { description: `<p><img src="${shared}"></p>` });
+    expect((await as(app, user).delete(`/api/issues/${doomed}`)).status).toBe(200);
+    expect(await fileStatus(own)).toBe(404);
+    expect(await fileStatus(shared)).toBe(200);
+  });
+
   it("rejects untrusted or non-existent attachment URLs", async () => {
     const id = await createIssue(app, user, slug);
     for (const url of ["javascript:alert(1)", "https://evil.example/x.png", "/api/uploads/files/64b000000000000000000000"]) {

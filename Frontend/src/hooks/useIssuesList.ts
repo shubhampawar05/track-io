@@ -2,8 +2,9 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useSyncExternalStore } from "react";
-import { apiJson } from "@/lib/api-client";
+import { apiJson, apiJsonWithHeaders } from "@/lib/api-client";
 import { compareIssuesBoard, type BoardReorderEntry } from "@/lib/issue-board-sort";
+import { fetchAllIssuePages, type IssueListResult } from "@/lib/issue-list-pages";
 import { orgIssuesQueryOptions } from "@/lib/query-org-sync";
 import type { Issue } from "@/types/issue";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
@@ -64,11 +65,6 @@ function getPipelineSnapshot() {
 
 export function syncPipelineDraftFromApplied() {
   pipelineDraft = cloneFilters(pipelineApplied);
-  emitPipeline();
-}
-
-export function setPipelineDraft(next: PipelineFilterState) {
-  pipelineDraft = cloneFilters(next);
   emitPipeline();
 }
 
@@ -157,6 +153,8 @@ export function formatAssigneeFilterChipLabel(
   return membersById.get(value) ?? "Member";
 }
 
+const EMPTY_ISSUES: Issue[] = [];
+
 /**
  * `null` = all issues. `""` = skip fetch (e.g. parent still resolving project).
  * `assignedToMe` filters server-side by the signed-in user (`assignee=me`); it ignores pipeline filters.
@@ -192,9 +190,19 @@ export function useIssuesList(
         projectSlug != null
           ? `/api/projects/${encodeURIComponent(projectSlug)}/issues${q}`
           : `/api/issues${q}`;
-      const r = await apiJson<Issue[]>(path, { orgId: queryKey[1] });
-      if (!r.success) throw new Error(r.error);
-      return r.data;
+      const orgId = queryKey[1];
+      // The workspace-wide list is paged by the API; project lists are returned whole.
+      const result: IssueListResult<Issue> =
+        projectSlug == null
+          ? await fetchAllIssuePages<Issue>(path, (url) => apiJsonWithHeaders<Issue[]>(url, { orgId }))
+          : await (async () => {
+              const r = await apiJson<Issue[]>(path, { orgId });
+              if (!r.success) throw new Error(r.error);
+              return { issues: r.data, total: r.data.length };
+            })();
+      // Each page is ordered on its own; order the merged list for display.
+      if (projectSlug == null) result.issues.sort(compareIssuesBoard);
+      return result;
     },
   });
 
@@ -204,16 +212,16 @@ export function useIssuesList(
       if (!organizationId) return;
       await queryClient.cancelQueries({ queryKey: ["issues", organizationId], exact: false });
 
-      queryClient.setQueriesData<Issue[]>(
+      queryClient.setQueriesData<IssueListResult<Issue>>(
         { queryKey: ["issues", organizationId], exact: false },
         (old) => {
           if (!old) return old;
-          const merged = old.map((issue) =>
+          const merged = old.issues.map((issue) =>
             issue.id === update.issueId
               ? { ...issue, status: update.status as Issue["status"], sortOrder: update.sortOrder }
               : issue,
           );
-          return [...merged].sort(compareIssuesBoard);
+          return { ...old, issues: [...merged].sort(compareIssuesBoard) };
         },
       );
 
@@ -233,7 +241,9 @@ export function useIssuesList(
   );
 
   return {
-    issues: query.data ?? [],
+    issues: query.data?.issues ?? EMPTY_ISSUES,
+    /** Server-side count of matching issues; larger than `issues.length` only when capped. */
+    totalCount: query.data?.total ?? 0,
     loading: query.isLoading,
     isError: query.isError,
     error: query.error,

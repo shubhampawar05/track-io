@@ -105,6 +105,7 @@ export async function logout(req: Request, res: Response) {
   try {
     if (req.userId) await User.updateOne({ _id: req.userId }, { $inc: { tokenVersion: 1 } });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("Failed to revoke sessions on logout", err);
   }
   res.clearCookie(COOKIE_NAME, authCookieBase());

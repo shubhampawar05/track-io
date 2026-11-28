@@ -38,7 +38,8 @@ interface AuthState {
   patchProfile: (name: string) => Promise<string | null>;
   login: (email: string, password: string) => Promise<string | null>;
   register: (name: string, email: string, password: string) => Promise<string | null>;
-  logout: () => Promise<void>;
+  /** Resolves to false when the server could not end the session (local state is cleared anyway). */
+  logout: () => Promise<boolean>;
 }
 
 function applyMe(me: AuthMeResponse) {
@@ -133,13 +134,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
   /** Always clears local session state, even if the server call fails. Callers clear the query cache. */
   logout: async () => {
     useRecordingSessionStore.getState().discardSession();
-    try {
-      await apiJson("/api/auth/logout", { method: "POST" });
-    } finally {
-      useOrganizationStore.getState().setOrganizationId(null);
-      clearPipelineFilters();
-      set({ user: null, organizations: [], hydrated: true });
-    }
+    const r = await apiJson("/api/auth/logout", { method: "POST" });
+    useOrganizationStore.getState().setOrganizationId(null);
+    clearPipelineFilters();
+    set({ user: null, organizations: [], hydrated: true });
+    return r.success;
   },
 };
 });

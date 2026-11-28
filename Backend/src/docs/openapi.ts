@@ -1,3 +1,5 @@
+import { LIMITS } from "../utils/inputLimits";
+
 type OpenApiObject = Record<string, unknown>;
 
 /** Core statuses every board keeps; boards may add further custom status slugs. */
@@ -1945,9 +1947,25 @@ export const openApiSpec: OpenApiObject = {
         tags: ["Issues"],
         summary: "List all visible issues across projects",
         description:
-          "Returns issues from projects the caller belongs to, capped at 1000 (the most recently updated issues are kept, then ordered for the board). The body stays a plain array; truncation is signalled via the `X-Total-Count` and `X-Results-Truncated` headers.",
+          "Returns issues from projects the caller belongs to, one page at a time (most recently updated first, then each page ordered for the board). Page size is `limit` (default and max 1000). The body stays a plain array; paging is signalled via headers: when `X-Results-Truncated` is `true`, request the next page with `offset` set to `X-Next-Offset`.",
         security: organizationSecurity,
-        parameters: issueListFilterParameters,
+        parameters: [
+          ...issueListFilterParameters,
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description: "Page size, 1–1000 (default 1000).",
+            schema: { type: "integer", minimum: 1, maximum: 1000, default: 1000 },
+          },
+          {
+            name: "offset",
+            in: "query",
+            required: false,
+            description: "Number of issues to skip (use the previous page's `X-Next-Offset`).",
+            schema: { type: "integer", minimum: 0, default: 0 },
+          },
+        ],
         responses: {
           "200": {
             ...successResponse("All issues", arrayOf("IssueList")),
@@ -1957,8 +1975,12 @@ export const openApiSpec: OpenApiObject = {
                 schema: { type: "integer", example: 1342 },
               },
               "X-Results-Truncated": {
-                description: "`true` when the list was capped at 1000 issues, otherwise `false`.",
+                description: "`true` when more issues follow this page, otherwise `false`.",
                 schema: { type: "string", enum: ["true", "false"] },
+              },
+              "X-Next-Offset": {
+                description: "Present only when more issues follow: the `offset` of the next page.",
+                schema: { type: "integer", example: 1000 },
               },
             },
           },
@@ -2141,7 +2163,7 @@ export const openApiSpec: OpenApiObject = {
         tags: ["Transcriptions"],
         summary: "Extract issue candidates from a transcript",
         description:
-          "Send the transcript either as a `.txt` file in the `file` multipart field (≤ 2 MB, `text/plain`) or as a `text` field (multipart or JSON). Max 200000 characters. Uses OpenAI; rate limited to 30 requests per hour per user.",
+          "Send the transcript either as a `.txt` file in the `file` multipart field (≤ 2 MB, `text/plain`) or as a `text` field (multipart or JSON). Max " + LIMITS.transcript + " characters. Uses OpenAI; rate limited to 30 requests per hour per user.",
         security: organizationSecurity,
         requestBody: {
           required: true,
@@ -2160,7 +2182,7 @@ export const openApiSpec: OpenApiObject = {
                 type: "object",
                 required: ["text"],
                 properties: {
-                  text: { type: "string", maxLength: 200000 },
+                  text: { type: "string", maxLength: LIMITS.transcript },
                 },
               },
             },

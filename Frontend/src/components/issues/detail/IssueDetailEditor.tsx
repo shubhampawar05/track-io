@@ -179,7 +179,11 @@ export const IssueDetailEditor = forwardRef<
 
   const saveTitle = useCallback(async () => {
     const t = title.trim();
-    if (!t || t === issue.title) return;
+    if (!t) {
+      setTitle(issue.title); // an issue always has a title; undo the cleared field
+      return;
+    }
+    if (t === issue.title) return;
     const r = await apiJson(`/api/issues/${encodeURIComponent(issue.id)}`, {
       method: "PATCH",
       body: { title: t },

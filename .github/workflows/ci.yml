@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   backend:
-    name: Backend (typecheck, build, tests)
+    name: Backend (lint, typecheck, build, tests)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -40,6 +40,7 @@ jobs:
           cache: npm
           cache-dependency-path: Backend/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
       - run: npm test

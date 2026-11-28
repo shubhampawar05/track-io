@@ -57,6 +57,12 @@ function resolveGithubEncryptionKey(): string {
   if (!isLocalDevEnvironment() && process.env.GITHUB_CLIENT_ID?.trim()) {
     throw new Error("GITHUB_OAUTH_ENCRYPTION_KEY must be set when GITHUB_CLIENT_ID is set outside development");
   }
+  if (!isLocalDevEnvironment()) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "GITHUB_OAUTH_ENCRYPTION_KEY is not set: GitHub webhook setup will fail with 503 until it is configured.",
+    );
+  }
   return "";
 }
 
@@ -103,8 +109,21 @@ function resolveTrustProxy(): boolean | number | string {
   return Number.isInteger(n) && n >= 0 ? n : raw;
 }
 
+/**
+ * Outside development/test a missing value must stop startup instead of silently falling
+ * back to a localhost default (which would point production at the wrong DB or origin).
+ */
+function requiredOutsideLocalDev(name: string, devDefault: string): string {
+  const v = process.env[name]?.trim() ?? "";
+  if (v) return v;
+  if (!isLocalDevEnvironment()) {
+    throw new Error(`${name} must be set (NODE_ENV=${process.env.NODE_ENV ?? "unset"})`);
+  }
+  return devDefault;
+}
+
 function parseFrontendOrigins(): string[] {
-  const raw = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
+  const raw = requiredOutsideLocalDev("FRONTEND_ORIGIN", "http://localhost:3000");
   const origins = raw
     .split(",")
     .map((s) => s.trim())
@@ -112,12 +131,14 @@ function parseFrontendOrigins(): string[] {
   return origins.length > 0 ? origins : ["http://localhost:3000"];
 }
 
+// JWT_SECRET is checked first so its (most important) error is the one reported.
+const jwtSecret = resolveJwtSecret();
 const frontendOrigins = parseFrontendOrigins();
 
 export const env = {
   PORT: resolvePort(),
-  MONGODB_URI: process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017/trackio",
-  JWT_SECRET: resolveJwtSecret(),
+  MONGODB_URI: requiredOutsideLocalDev("MONGODB_URI", "mongodb://127.0.0.1:27017/trackio"),
+  JWT_SECRET: jwtSecret,
   /** Primary frontend URL (emails, OAuth redirects). First value when comma-separated. */
   FRONTEND_ORIGIN: frontendOrigins[0]!,
   /** Allowed browser origins for CORS (supports comma-separated FRONTEND_ORIGIN). */
@@ -126,7 +147,7 @@ export const env = {
   /** Display name in transactional emails (subjects, headers). */
   APP_NAME: process.env.APP_NAME?.trim() || "Trackio",
   /** Base URL clients use to load uploaded files (e.g. http://localhost:4000). */
-  API_PUBLIC_URL: process.env.API_PUBLIC_URL?.trim() || "",
+  API_PUBLIC_URL: requiredOutsideLocalDev("API_PUBLIC_URL", ""),
   NODE_ENV: process.env.NODE_ENV ?? "development",
   TRUST_PROXY: resolveTrustProxy(),
   /** Serve Swagger UI + /api/openapi.json. Default: on outside production, off in production. */
