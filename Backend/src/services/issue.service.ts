@@ -17,6 +17,7 @@ import {
   unionColumnsFromProjects,
 } from "../utils/boardColumns";
 import { Organization } from "../models/Organization";
+import { SORT_ORDER_GAP } from "./sortOrderMigration.service";
 import { LIMITS, assertMaxLength } from "../utils/inputLimits";
 
 type Priority = "low" | "medium" | "high" | "urgent" | "none";
@@ -1103,7 +1104,12 @@ export async function createIssueUnderProject(
     p.memberIds as mongoose.Types.ObjectId[],
     uid,
   );
-  const sortOrder = await Issue.countDocuments({ projectId: p._id });
+  // Append to the end of the target column (positions use gaps; see sortOrderMigration).
+  const lastInColumn = await Issue.findOne({ projectId: p._id, status })
+    .sort({ sortOrder: -1 })
+    .select("sortOrder")
+    .lean();
+  const sortOrder = lastInColumn ? (lastInColumn.sortOrder ?? 0) + SORT_ORDER_GAP : SORT_ORDER_GAP;
   let dueDate: Date | null = null;
   if (input.dueDate === null || input.dueDate === "") {
     dueDate = null;
