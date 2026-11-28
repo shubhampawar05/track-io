@@ -4,17 +4,6 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Layers, X } from "lucide-react";
 
-const colors = [
-  "bg-indigo-500",
-  "bg-purple-500",
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-rose-500",
-  "bg-amber-500",
-  "bg-cyan-500",
-  "bg-pink-500",
-];
-
 export function NewProjectModal({
   isOpen,
   onClose,
@@ -27,8 +16,6 @@ export function NewProjectModal({
 }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [description, setDescription] = useState("");
-  const [color, setColor] = useState("bg-indigo-500");
 
   return (
     <AnimatePresence>
@@ -60,7 +47,7 @@ export function NewProjectModal({
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div
-                    className={`w-12 h-12 rounded-xl ${color} flex items-center justify-center text-white text-xl font-bold`}
+                    className={`w-12 h-12 rounded-xl bg-indigo-500 flex items-center justify-center text-white text-xl font-bold`}
                   >
                     {name ? name.charAt(0).toUpperCase() : "P"}
                   </div>
@@ -71,33 +58,10 @@ export function NewProjectModal({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Project name"
+                      aria-label="Project name"
                       className="w-full bg-transparent text-xl font-bold focus:outline-none placeholder:text-linear-text-muted/30"
                     />
                   </div>
-                </div>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Add description..."
-                  className="w-full bg-transparent text-sm focus:outline-none placeholder:text-linear-text-muted/50 min-h-[80px] resize-none"
-                />
-              </div>
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
-                  Icon Color
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {colors.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setColor(c)}
-                      className={`w-6 h-6 rounded-full ${c} border-2 transition-all duration-200 ${
-                        color === c ? "border-white" : "border-transparent"
-                      }`}
-                      aria-label={`Color ${c}`}
-                    />
-                  ))}
                 </div>
               </div>
             </div>
@@ -119,8 +83,6 @@ export function NewProjectModal({
                       const ok = await onAdd(name);
                       if (!ok) return;
                       setName("");
-                      setDescription("");
-                      setColor("bg-indigo-500");
                       onClose();
                     } finally {
                       setBusy(false);

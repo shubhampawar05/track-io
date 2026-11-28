@@ -61,6 +61,10 @@ export function IssueDetailQuickFields({
     () => projectData?.members ?? [],
     [projectData],
   );
+  /** Only project members can be assigned, so "Assign to me" is offered to members only. */
+  const canAssignSelf = Boolean(
+    currentUserId && members.some((m) => m.id === currentUserId),
+  );
 
   const assigneeSelectMembers = useMemo(() => {
     const fromMembers: ProjectMember[] = [...members];
@@ -208,7 +212,7 @@ export function IssueDetailQuickFields({
           sideOffset={6}
           className={propertySelectContentClass}
         >
-          {currentUserId ? (
+          {canAssignSelf && currentUserId ? (
             <SelectItem value={currentUserId} className={propertySelectItemClass}>
               Assign to me
             </SelectItem>
@@ -217,7 +221,7 @@ export function IssueDetailQuickFields({
             Unassigned
           </SelectItem>
           {assigneeSelectMembers
-            .filter((m) => (currentUserId ? m.id !== currentUserId : true))
+            .filter((m) => (canAssignSelf ? m.id !== currentUserId : true))
             .map((m) => (
               <SelectItem key={m.id} value={m.id} className={propertySelectItemClass}>
                 <span className="flex min-w-0 flex-1 items-center gap-2">

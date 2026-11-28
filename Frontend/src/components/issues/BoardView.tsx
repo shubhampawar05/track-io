@@ -47,6 +47,7 @@ import {
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { useModalDialog } from "@/hooks/useModalDialog";
 import { IssuePipelineFilterChipsRow } from "@/components/issues/ListView";
 import { IssuesBoardSkeleton } from "@/components/issues/IssuesBoardSkeleton";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
@@ -251,7 +252,14 @@ export function BoardView({
   const columnStatuses = useMemo(() => columns.map((c) => c.status), [columns]);
 
   const [items, setItems] = useState<Record<string, string[]>>({});
-  const [lastOpenedId, setLastOpenedId] = useState<string | null>(null);
+  const [lastOpenedId, setLastOpenedId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return sessionStorage.getItem("last-opened-issue");
+    } catch {
+      return null;
+    }
+  });
   const [activeId, setActiveId] = useState<string | null>(null);
   const itemsRef = useRef(items);
   const draggingBoardRef = useRef(false);
@@ -266,10 +274,6 @@ export function BoardView({
   useEffect(() => {
     issuesPropRef.current = issues;
   }, [issues]);
-
-  useEffect(() => {
-    setLastOpenedId(sessionStorage.getItem("last-opened-issue"));
-  }, []);
 
   const handleIssueNavigate = useCallback(
     (issue: Issue) => {
@@ -401,6 +405,20 @@ export function BoardView({
       );
     },
     [columns, organizationId, issues, isGlobalBoard, boardScope, persistColumns, showToast],
+  );
+
+  const closeAddDialog = useCallback(() => {
+    setAddOpen(false);
+    setAddTitle("");
+  }, []);
+  const closeRenameDialog = useCallback(() => {
+    setRenameId(null);
+    setRenameTitle("");
+  }, []);
+  const addDialogRef = useModalDialog<HTMLFormElement>(addOpen, closeAddDialog);
+  const renameDialogRef = useModalDialog<HTMLFormElement>(
+    renameId !== null,
+    closeRenameDialog,
   );
 
   const openRename = useCallback(
@@ -593,7 +611,9 @@ export function BoardView({
               issueMap={issueMap}
               lastOpenedId={lastOpenedId}
               onIssueNavigate={handleIssueNavigate}
-              onNewIssue={() => openNewIssueModal(issues[0]?.projectId ?? null)}
+              onNewIssue={() =>
+                openNewIssueModal(isGlobalBoard ? null : boardScope, col.status)
+              }
               canManageColumn={canManageBoard}
               onRenameColumn={() => openRename(col.id)}
               onRemoveColumn={() => {
@@ -630,7 +650,7 @@ export function BoardView({
       >
         {activeIssue ? (
           <div className="w-80 min-w-[320px] pointer-events-none cursor-grabbing opacity-95">
-            <IssueCard issue={activeIssue} onClick={() => {}} />
+            <IssueCard issue={activeIssue} onClick={() => {}} interactive={false} />
           </div>
         ) : null}
       </DragOverlay>
@@ -645,22 +665,36 @@ export function BoardView({
               onClick={() => setAddOpen(false)}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
-            <motion.div
+            <motion.form
+              ref={addDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="board-add-column-title"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitAddColumn();
+              }}
               initial={{ opacity: 0, scale: 0.95, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               className="relative w-full max-w-md bg-(--card) border border-(--border) rounded-xl shadow-2xl p-6 space-y-4"
             >
-              <h3 className="text-sm font-semibold">Add column</h3>
+              <h3 id="board-add-column-title" className="text-sm font-semibold">
+                Add column
+              </h3>
               <p className="text-xs text-linear-text-muted">
                 Issue status saved to the server will match the slug below. Drag
                 cards into this column to set that status.
               </p>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+                <label
+                  htmlFor="board-add-column-input"
+                  className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+                >
                   Title
                 </label>
                 <input
+                  id="board-add-column-input"
                   value={addTitle}
                   onChange={(e) => setAddTitle(e.target.value)}
                   placeholder="e.g. Review"
@@ -676,23 +710,19 @@ export function BoardView({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAddOpen(false);
-                    setAddTitle("");
-                  }}
+                  onClick={closeAddDialog}
                   className="px-3 py-1.5 text-sm text-linear-text-muted hover:text-(--text)"
                 >
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={() => void submitAddColumn()}
+                  type="submit"
                   className="px-3 py-1.5 text-sm rounded-md bg-linear-accent text-primary-foreground hover:brightness-110"
                 >
                   Add
                 </button>
               </div>
-            </motion.div>
+            </motion.form>
           </div>
         )}
       </AnimatePresence>
@@ -704,24 +734,35 @@ export function BoardView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => {
-                setRenameId(null);
-                setRenameTitle("");
-              }}
+              onClick={closeRenameDialog}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
-            <motion.div
+            <motion.form
+              ref={renameDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="board-rename-column-title"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitRename();
+              }}
               initial={{ opacity: 0, scale: 0.95, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               className="relative w-full max-w-md bg-(--card) border border-(--border) rounded-xl shadow-2xl p-6 space-y-4"
             >
-              <h3 className="text-sm font-semibold">Rename column</h3>
+              <h3 id="board-rename-column-title" className="text-sm font-semibold">
+                Rename column
+              </h3>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+                <label
+                  htmlFor="board-rename-column-input"
+                  className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+                >
                   Title
                 </label>
                 <input
+                  id="board-rename-column-input"
                   value={renameTitle}
                   onChange={(e) => setRenameTitle(e.target.value)}
                   className="w-full bg-white/5 border border-(--border) rounded-md px-3 py-2 text-sm focus:outline-none focus:border-linear-accent"
@@ -730,23 +771,19 @@ export function BoardView({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setRenameId(null);
-                    setRenameTitle("");
-                  }}
+                  onClick={closeRenameDialog}
                   className="px-3 py-1.5 text-sm text-linear-text-muted hover:text-(--text)"
                 >
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={() => void submitRename()}
+                  type="submit"
                   className="px-3 py-1.5 text-sm rounded-md bg-linear-accent text-primary-foreground hover:brightness-110"
                 >
                   Save
                 </button>
               </div>
-            </motion.div>
+            </motion.form>
           </div>
         )}
       </AnimatePresence>

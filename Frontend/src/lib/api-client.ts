@@ -44,7 +44,8 @@ async function readPayload<T>(res: Response): Promise<ApiResponse<T>> {
   return fail(`Unexpected server response (HTTP ${res.status})`);
 }
 
-function apiBaseUrl(): string {
+/** Backend origin (no trailing slash); also used to absolutize API-relative upload URLs. */
+export function apiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (raw) return raw.replace(/\/$/, "");
   return "http://localhost:4000";
@@ -159,8 +160,3 @@ export async function apiUploadRecording<T>(file: File, durationMs?: number): Pr
   return apiUploadForm<T>("/api/transcriptions/recordings", form);
 }
 
-export function apiOrigin(): string {
-  const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  if (raw) return raw.replace(/\/$/, "");
-  return "http://localhost:4000";
-}

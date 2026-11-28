@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { apiJson, apiJsonWithStatus } from "@/lib/api-client";
 import {
   buildIssueDetailUrl,
@@ -78,8 +78,11 @@ export function IssueDetailSubtasks({
   const navOpts = useIssueNavFromParams();
   const [issueKeyInput, setIssueKeyInput] = useState("");
   const [saving, setSaving] = useState(false);
+  /** Covers the key lookup + save; the ref blocks a second submit before re-render. */
+  const [linking, setLinking] = useState(false);
+  const linkingRef = useRef(false);
 
-  const list = issue.subtasks ?? [];
+  const list = useMemo(() => issue.subtasks ?? [], [issue.subtasks]);
   const doneCount = list.filter((s) => s.done).length;
   const total = list.length;
   const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
@@ -109,44 +112,49 @@ export function IssueDetailSubtasks({
     void persist(next);
   };
 
-  const remove = (id: string) => {
-    void persist(list.filter((s) => s.id !== id));
-  };
-
   const addLinkedSubtask = useCallback(async () => {
     const key = normalizeIssueKey(issueKeyInput);
-    if (!key) return;
-    const { status, payload } = await apiJsonWithStatus<IssueDetail>(
-      `/api/issues/${encodeURIComponent(key)}`,
-    );
-    if (!payload.success || status === 404) {
-      showToast(payload.error ?? "Issue not found", "error");
-      return;
+    if (!key || linkingRef.current) return;
+    linkingRef.current = true;
+    setLinking(true);
+    try {
+      const { status, payload } = await apiJsonWithStatus<IssueDetail>(
+        `/api/issues/${encodeURIComponent(key)}`,
+      );
+      if (!payload.success || status === 404) {
+        showToast(payload.error ?? "Issue not found", "error");
+        return;
+      }
+      const linkedId = payload.data.id.trim();
+      if (linkedId === issue.id) {
+        showToast("Cannot link an issue to itself", "error");
+        return;
+      }
+      if (
+        list.some(
+          (s) => (s.linkedIssueId ?? "").toLowerCase() === linkedId.toLowerCase(),
+        )
+      ) {
+        showToast("That issue is already linked as a subtask", "error");
+        return;
+      }
+      const title = payload.data.title.trim() || linkedId;
+      await persist([
+        ...list,
+        {
+          id: newSubtaskId(),
+          title,
+          done: false,
+          linkedIssueId: linkedId,
+        },
+      ]);
+      setIssueKeyInput("");
+    } catch {
+      showToast("Could not link that issue. Check your connection and try again.", "error");
+    } finally {
+      linkingRef.current = false;
+      setLinking(false);
     }
-    const linkedId = payload.data.id.trim();
-    if (linkedId === issue.id) {
-      showToast("Cannot link an issue to itself", "error");
-      return;
-    }
-    if (
-      list.some(
-        (s) => (s.linkedIssueId ?? "").toLowerCase() === linkedId.toLowerCase(),
-      )
-    ) {
-      showToast("That issue is already linked as a subtask", "error");
-      return;
-    }
-    const title = payload.data.title.trim() || linkedId;
-    await persist([
-      ...list,
-      {
-        id: newSubtaskId(),
-        title,
-        done: false,
-        linkedIssueId: linkedId,
-      },
-    ]);
-    setIssueKeyInput("");
   }, [issue.id, issueKeyInput, list, persist, showToast]);
 
   return (
@@ -313,7 +321,7 @@ export function IssueDetailSubtasks({
           />
           <button
             type="button"
-            disabled={saving || !normalizeIssueKey(issueKeyInput)}
+            disabled={saving || linking || !normalizeIssueKey(issueKeyInput)}
             onClick={() => void addLinkedSubtask()}
             className="linear-accent-fill flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-md transition-[opacity,filter] hover:brightness-110 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
             aria-label="Link issue as subtask"

@@ -107,13 +107,19 @@ export function SettingsPreferencesTab() {
         {ROWS.map((row) => (
           <div key={row.key} className="flex items-center justify-between p-4 linear-card gap-4">
             <div>
-              <p className="text-sm font-medium">{row.title}</p>
-              <p className="text-xs text-linear-text-muted">{row.desc}</p>
+              <p id={`pref-${row.key}-title`} className="text-sm font-medium">
+                {row.title}
+              </p>
+              <p id={`pref-${row.key}-desc`} className="text-xs text-linear-text-muted">
+                {row.desc}
+              </p>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={prefs[row.key]}
+              aria-labelledby={`pref-${row.key}-title`}
+              aria-describedby={`pref-${row.key}-desc`}
               onClick={() => toggle(row.key)}
               className={`w-10 h-5 rounded-full relative shrink-0 transition-colors duration-200 ${
                 prefs[row.key] ? "bg-linear-accent" : "bg-white/10"

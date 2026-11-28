@@ -70,11 +70,30 @@ export function ExtractTasksModal({
   const transcriptionSeedCandidates = useUIStore(
     (s) => s.transcriptionSeedCandidates,
   );
-  const clearTranscriptionSeedCandidates = useUIStore(
-    (s) => s.clearTranscriptionSeedCandidates,
-  );
 
   const [activeTab, setActiveTab] = useState<"paste" | "record">("paste");
+
+  // Sync local state to props/store during render (not in effects): switch to the requested
+  // tab each time the modal opens, and load transcription candidates once per seed.
+  const openTabKey = isOpen ? initialTab : null;
+  const [prevOpenTabKey, setPrevOpenTabKey] = useState<typeof openTabKey>(null);
+  if (openTabKey !== prevOpenTabKey) {
+    setPrevOpenTabKey(openTabKey);
+    if (openTabKey) setActiveTab(openTabKey);
+  }
+  const [consumedSeed, setConsumedSeed] =
+    useState<typeof transcriptionSeedCandidates>(null);
+  if (
+    isOpen &&
+    transcriptionSeedCandidates &&
+    transcriptionSeedCandidates.length > 0 &&
+    transcriptionSeedCandidates !== consumedSeed
+  ) {
+    setConsumedSeed(transcriptionSeedCandidates);
+    setCandidates(
+      transcriptionSeedCandidates.map((c) => ({ ...c, selected: true })),
+    );
+  }
 
   const phase = useRecordingSessionStore((s) => s.phase);
   const durationMs = useRecordingSessionStore((s) => s.durationMs);
@@ -103,24 +122,6 @@ export function ExtractTasksModal({
     if (!projectSlug) return "";
     return projects.find((p) => p.slug === projectSlug)?.name ?? "";
   }, [projectSlug, projects]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setActiveTab(initialTab);
-  }, [isOpen, initialTab]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (
-      !transcriptionSeedCandidates ||
-      transcriptionSeedCandidates.length === 0
-    )
-      return;
-    setCandidates(
-      transcriptionSeedCandidates.map((c) => ({ ...c, selected: true })),
-    );
-    clearTranscriptionSeedCandidates();
-  }, [clearTranscriptionSeedCandidates, isOpen, transcriptionSeedCandidates]);
 
   useEffect(() => {
     if (!isOpen) return;

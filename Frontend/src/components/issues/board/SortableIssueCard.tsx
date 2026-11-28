@@ -32,8 +32,29 @@ export function SortableIssueCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="touch-none" {...listeners} {...attributes}>
-      <IssueCard issue={issue} isLastOpened={isLastOpened} onClick={onNavigate} />
+    // The sortable wrapper is the card's single focusable element (dnd-kit sets role="button").
+    // Enter opens the issue; Space (via the keyboard sensor) picks it up to drag.
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="touch-none"
+      {...listeners}
+      {...attributes}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !active) {
+          e.preventDefault();
+          onNavigate();
+          return;
+        }
+        listeners?.onKeyDown?.(e);
+      }}
+    >
+      <IssueCard
+        issue={issue}
+        isLastOpened={isLastOpened}
+        onClick={onNavigate}
+        interactive={false}
+      />
     </div>
   );
 }

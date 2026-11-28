@@ -14,6 +14,7 @@ function AppToastHost() {
     <AnimatePresence>
       {toast && (
         <Toast
+          id={toast.id}
           message={toast.message}
           type={toast.type}
           onClose={clearToast}

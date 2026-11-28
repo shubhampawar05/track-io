@@ -198,22 +198,6 @@ export function useIssuesList(
     },
   });
 
-  const patchStatus = useCallback(
-    async (issueId: string, status: string, slug: string) => {
-      const r = await apiJson<Issue>(
-        `/api/projects/${encodeURIComponent(slug)}/issues/${encodeURIComponent(issueId)}`,
-        { method: "PATCH", body: { status } },
-      );
-      if (r.success) {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["issues", organizationId], exact: false }),
-          queryClient.invalidateQueries({ queryKey: ["issue", organizationId, issueId] }),
-        ]);
-      }
-    },
-    [organizationId, queryClient],
-  );
-
   /** Move one card: a single PATCH (status + sortOrder), optimistic with rollback via refetch. */
   const reorderBoard = useCallback(
     async (update: BoardReorderEntry) => {
@@ -254,7 +238,6 @@ export function useIssuesList(
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,
-    patchStatus,
     reorderBoard,
     appliedPipelineFilters: applyPipelineFilters ? applied : emptyPipelineFilters(),
   };

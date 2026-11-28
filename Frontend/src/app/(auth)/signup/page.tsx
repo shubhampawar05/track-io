@@ -21,7 +21,6 @@ function SignupContent() {
   return (
     <AuthView
       variant="signupOnly"
-      initialMode="signup"
       loginHref={`/${nextQs}`}
       onRequestPasswordReset={async (email) => {
         const r = await apiJson<{ message: string }>("/api/auth/forgot-password", {

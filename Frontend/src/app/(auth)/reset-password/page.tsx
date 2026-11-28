@@ -25,6 +25,7 @@ function ResetPasswordForm() {
   }, []);
 
   const submit = async () => {
+    if (busy) return;
     setError(null);
     if (!token) {
       setError("Missing reset token. Open the link from your email.");
@@ -91,24 +92,41 @@ function ResetPasswordForm() {
               <p className="text-sm text-linear-text-muted">Taking you to sign in…</p>
             </div>
           ) : (
-            <>
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
+              className="space-y-6"
+            >
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+                <label
+                  htmlFor="reset-new-password"
+                  className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+                >
                   New password
                 </label>
                 <input
+                  id="reset-new-password"
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-white/5 border border-(--border) rounded-md px-4 py-2 text-sm focus:outline-none focus:border-linear-accent transition-all duration-200"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+                <label
+                  htmlFor="reset-confirm-password"
+                  className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+                >
                   Confirm password
                 </label>
                 <input
+                  id="reset-confirm-password"
                   type="password"
+                  autoComplete="new-password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   className="w-full bg-white/5 border border-(--border) rounded-md px-4 py-2 text-sm focus:outline-none focus:border-linear-accent transition-all duration-200"
@@ -116,14 +134,13 @@ function ResetPasswordForm() {
               </div>
               {error ? <p className="text-sm text-red-400">{error}</p> : null}
               <button
-                type="button"
+                type="submit"
                 disabled={busy}
-                onClick={() => void submit()}
                 className="w-full py-2.5 bg-linear-accent hover:brightness-110 rounded-md font-semibold text-primary-foreground transition-all duration-200 disabled:opacity-50"
               >
                 {busy ? "Updating…" : "Update password"}
               </button>
-            </>
+            </form>
           )}
         </div>
       </motion.div>

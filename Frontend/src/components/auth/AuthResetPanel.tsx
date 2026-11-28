@@ -69,15 +69,27 @@ export function AuthResetPanel({
               return to sign in.
             </p>
           ) : (
-            <>
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submit();
+              }}
+              className="space-y-6"
+            >
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+                <label
+                  htmlFor="auth-reset-email"
+                  className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+                >
                   Work Email
                 </label>
                 <div className="relative">
                   <MessageSquare className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-linear-text-muted" />
                   <input
+                    id="auth-reset-email"
                     type="email"
+                    autoComplete="email"
                     placeholder="name@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -87,14 +99,13 @@ export function AuthResetPanel({
               </div>
               {error ? <p className="text-sm text-red-400">{error}</p> : null}
               <button
-                type="button"
+                type="submit"
                 disabled={busy}
-                onClick={() => void submit()}
                 className="w-full py-2.5 bg-linear-accent hover:brightness-110 rounded-md font-semibold text-primary-foreground transition-all duration-200 shadow-lg shadow-linear-accent/20 disabled:opacity-50"
               >
                 {busy ? "Sending…" : "Send reset link"}
               </button>
-            </>
+            </form>
           )}
           <button
             type="button"

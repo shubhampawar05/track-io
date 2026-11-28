@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Users } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
@@ -28,11 +28,26 @@ function AcceptInviteContent() {
   const user = useAuthStore((s) => s.user);
   const hydrated = useAuthStore((s) => s.hydrated);
   const hydrate = useAuthStore((s) => s.hydrate);
+  const logout = useAuthStore((s) => s.logout);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ organizationName: string; role: string } | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(true);
-  const [previewFailed, setPreviewFailed] = useState(false);
+
+  const previewQuery = useQuery({
+    queryKey: ["invite-preview", token],
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await apiJson<{ organizationName: string; role: string }>(
+        `/api/auth/invite-preview?token=${encodeURIComponent(token)}`,
+      );
+      if (!r.success) throw new Error(r.error);
+      return r.data;
+    },
+  });
+  const preview = previewQuery.data ?? null;
+  const previewLoading = Boolean(token) && previewQuery.isPending;
+  const previewFailed = previewQuery.isError;
 
   const pathHere = `/accept-invite?token=${encodeURIComponent(token)}`;
   const loginHref = `/?next=${encodeURIComponent(pathHere)}`;
@@ -42,30 +57,20 @@ function AcceptInviteContent() {
     void hydrate();
   }, [hydrate]);
 
-  useEffect(() => {
-    if (!token) {
-      setPreviewLoading(false);
-      return;
+  /** Sign out first: the sign-in page sends already-signed-in users straight on to `next`. */
+  const switchAccount = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await logout();
+    } catch {
+      // logout() always clears local session state; a server failure is fine here.
+    } finally {
+      queryClient.clear();
+      setBusy(false);
     }
-    let cancelled = false;
-    setPreviewLoading(true);
-    setPreviewFailed(false);
-    void (async () => {
-      const r = await apiJson<{ organizationName: string; role: string }>(
-        `/api/auth/invite-preview?token=${encodeURIComponent(token)}`,
-      );
-      if (cancelled) return;
-      setPreviewLoading(false);
-      if (!r.success) {
-        setPreviewFailed(true);
-        return;
-      }
-      setPreview(r.data);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+    router.push(loginHref);
+  };
 
   const accept = async () => {
     if (!token || busy) return;
@@ -225,9 +230,14 @@ function AcceptInviteContent() {
           >
             {busy ? "Please wait…" : "Decline invitation"}
           </button>
-          <Link href={loginHref} className="text-sm text-linear-accent hover:underline">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void switchAccount()}
+            className="text-sm text-linear-accent hover:underline disabled:opacity-50"
+          >
             Use a different account
-          </Link>
+          </button>
         </div>
       </motion.div>
     </div>

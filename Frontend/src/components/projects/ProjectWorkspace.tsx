@@ -11,10 +11,10 @@ import { useProjectsList } from "@/hooks/useProjectsList";
 import { ProjectWorkspaceSkeleton } from "@/components/projects/ProjectWorkspaceSkeleton";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 
+/** `projectId` is the already-decoded route segment (decoded once by the page). */
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "board" ? "board" : "list";
-  const decoded = decodeURIComponent(projectId);
   const {
     projects,
     loading: loadingProjects,
@@ -22,7 +22,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     error: projectsErrorValue,
     refetch: refetchProjects,
   } = useProjectsList();
-  const project = projects.find((p) => p.slug === decoded || p.name === decoded);
+  const project = projects.find((p) => p.slug === projectId || p.name === projectId);
   const {
     issues,
     loading: loadingIssues,

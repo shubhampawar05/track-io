@@ -40,7 +40,11 @@ export function Sidebar() {
 
   return (
     <aside className="sticky top-0 flex h-screen w-64 flex-col border-r border-linear-border bg-linear-sidebar">
-      <div className="p-4 flex items-center gap-3 cursor-pointer" onClick={() => router.push("/issues/board")}>
+      <Link
+        href="/issues/board"
+        aria-label="Trackio home"
+        className="p-4 flex items-center gap-3 cursor-pointer"
+      >
         <div className="linear-accent-fill flex h-8 w-8 items-center justify-center rounded-lg">
           <Layers className="w-5 h-5 text-white" />
         </div>
@@ -50,7 +54,7 @@ export function Sidebar() {
             {organizations.find((o) => o.id === organizationId)?.name ?? "Workspace"}
           </p>
         </div>
-      </div>
+      </Link>
 
       <WorkspaceSwitcher />
 
@@ -109,13 +113,18 @@ export function Sidebar() {
 
       <div className="p-4 border-t border-linear-border space-y-1">
         {canInvite ? (
-          <div className="linear-sidebar-item" onClick={() => setInviteOpen(true)}>
+          <button
+            type="button"
+            className="linear-sidebar-item w-full text-left"
+            onClick={() => setInviteOpen(true)}
+          >
             <Users className="w-4 h-4" />
             Invite People
-          </div>
+          </button>
         ) : null}
-        <div
-          className="linear-sidebar-item text-red-500 hover:bg-red-500/10"
+        <button
+          type="button"
+          className="linear-sidebar-item w-full text-left text-red-500 hover:bg-red-500/10"
           onClick={() => {
             void (async () => {
               let ok = true;
@@ -136,7 +145,7 @@ export function Sidebar() {
         >
           <LogOut className="w-4 h-4" />
           Logout
-        </div>
+        </button>
       </div>
     </aside>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Layers } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
@@ -12,13 +13,16 @@ import { AppLoadingSkeleton } from "@/components/layout/AppLoadingSkeleton";
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const organizations = useAuthStore((s) => s.organizations);
   const hydrated = useAuthStore((s) => s.hydrated);
   const organizationId = useOrganizationStore((s) => s.organizationId);
   const hydrate = useAuthStore((s) => s.hydrate);
+  const logout = useAuthStore((s) => s.logout);
   const showToast = useUIStore((s) => s.showToast);
-  const [name, setName] = useState("");
+  /** null until the user edits the field; until then show the current workspace name. */
+  const [nameDraft, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const current = useMemo(
@@ -26,9 +30,7 @@ export default function OnboardingPage() {
     [organizations, organizationId],
   );
 
-  useEffect(() => {
-    if (current?.name) setName(current.name);
-  }, [current?.name]);
+  const name = nameDraft ?? current?.name ?? "";
 
   useEffect(() => {
     if (!hydrated) return;
@@ -59,8 +61,54 @@ export default function OnboardingPage() {
     }
   };
 
-  if (!hydrated || !user || !organizationId || !current) {
+  if (!hydrated || !user) {
     return <AppLoadingSkeleton />;
+  }
+
+  if (!organizationId || !current) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md linear-card p-8 space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-xl font-semibold tracking-tight">No workspace found</h1>
+            <p className="text-sm text-linear-text-muted">
+              We couldn&apos;t find a workspace for your account. Reload to try again, or sign
+              out and use the account your workspace invitation was sent to.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="linear-button-primary"
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await logout();
+                  } catch {
+                    // logout() always clears local session state.
+                  } finally {
+                    queryClient.clear();
+                    setBusy(false);
+                  }
+                  router.replace("/");
+                })();
+              }}
+              className="px-4 py-2 text-sm font-medium hover:bg-white/5 rounded-md border border-(--border) transition-colors disabled:opacity-50"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

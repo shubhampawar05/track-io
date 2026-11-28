@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { apiJson } from "@/lib/api-client";
@@ -11,7 +11,8 @@ export function SettingsWorkspaceTab() {
   const organizations = useAuthStore((s) => s.organizations);
   const hydrate = useAuthStore((s) => s.hydrate);
   const showToast = useUIStore((s) => s.showToast);
-  const [name, setName] = useState("");
+  /** Draft tied to the org it was typed for, so switching workspaces shows that org's name. */
+  const [nameDraft, setNameDraft] = useState<{ orgId: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const current = useMemo(
@@ -21,9 +22,13 @@ export function SettingsWorkspaceTab() {
 
   const canRename = current?.role === "owner" || current?.role === "admin";
 
-  useEffect(() => {
-    if (current?.name) setName(current.name);
-  }, [current?.name]);
+  const name =
+    nameDraft && current && nameDraft.orgId === current.id
+      ? nameDraft.name
+      : (current?.name ?? "");
+  const setName = (value: string) => {
+    if (current) setNameDraft({ orgId: current.id, name: value });
+  };
 
   const save = async () => {
     const n = name.trim();

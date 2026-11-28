@@ -5,12 +5,13 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, Moon, Pause, Plus, Sparkles, Sun } from "lucide-react";
+import { Bell, Moon, Pause, Play, Plus, Sparkles, Sun } from "lucide-react";
 import { apiJson } from "@/lib/api-client";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useRecordingSessionStore } from "@/stores/useRecordingSessionStore";
 import { isIssueDetailPath } from "@/utils/isIssueDetailPath";
+import { safeDecodeURIComponent } from "@/lib/utils";
 import { ThemePrimaryDevPicker } from "@/components/theme/ThemePrimaryDevPicker";
 
 type ActiveSprintDto = { id: string; name: string } | null;
@@ -98,7 +99,7 @@ export function TopBar() {
 
   const onCreateIssue = () => {
     const m = pathname.match(/^\/projects\/([^/]+)/);
-    const slug = m ? decodeURIComponent(m[1]) : null;
+    const slug = m ? safeDecodeURIComponent(m[1]) : null;
     openNewIssueModal(slug);
   };
 
@@ -205,7 +206,11 @@ export function TopBar() {
                   recordingPaused ? "Resume recording" : "Pause recording"
                 }
               >
-                <Pause className="w-3.5 h-3.5" />
+                {recordingPaused ? (
+                  <Play className="w-3.5 h-3.5" />
+                ) : (
+                  <Pause className="w-3.5 h-3.5" />
+                )}
               </button>
             ) : null}
           </div>
@@ -223,9 +228,15 @@ export function TopBar() {
             <Moon className="w-4 h-4 text-linear-text-muted" />
           )}
         </button>
-        <div className="h-8 w-8 rounded-full bg-white/5 border border-(--border) flex items-center justify-center cursor-pointer hover:bg-(--hover) transition-all duration-200">
+        <button
+          type="button"
+          disabled
+          aria-label="Notifications (coming soon)"
+          title="Notifications coming soon"
+          className="h-8 w-8 rounded-full bg-white/5 border border-(--border) flex items-center justify-center cursor-not-allowed opacity-70"
+        >
           <Bell className="w-4 h-4 text-linear-text-muted" />
-        </div>
+        </button>
         <Link
           href="/settings"
           className="h-8 w-8 rounded-full flex items-center justify-center cursor-pointer overflow-hidden border border-(--border) hover:scale-105 transition-transform duration-200 [background-color:var(--primary)] [background-image:var(--primary-gradient,none)]"

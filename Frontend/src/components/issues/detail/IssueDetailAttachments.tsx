@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { AlertCircle, List as ListIcon, Paperclip, Plus, Trash2, X } from "lucide-react";
-import { apiJson, apiOrigin, apiUploadFile } from "@/lib/api-client";
+import { apiJson, apiBaseUrl, apiUploadFile } from "@/lib/api-client";
 import type { IssueAttachment, IssueDetail } from "@/types/issue";
 import { useUIStore } from "@/stores/useUIStore";
 import {
@@ -25,7 +25,7 @@ function resolveHref(url: string): string | null {
   if (trimmed.startsWith("javascript:")) return null;
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return `${apiOrigin()}${normalized}`;
+  return `${apiBaseUrl()}${normalized}`;
 }
 
 function normalizeDisplayFilename(name: string): string {

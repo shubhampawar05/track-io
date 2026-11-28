@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { motion } from "motion/react";
 import type { Issue } from "@/types/issue";
 import {
@@ -12,10 +13,16 @@ export function IssueCard({
   issue,
   onClick,
   isLastOpened = false,
+  interactive = true,
 }: {
   issue: Issue;
   onClick: () => void;
   isLastOpened?: boolean;
+  /**
+   * When false the card is not focusable itself (e.g. inside a sortable wrapper that
+   * already is the focusable button), so there is a single tab stop per card.
+   */
+  interactive?: boolean;
 }) {
   const pv = getIssuePriorityVisual(issue.priority);
   return (
@@ -24,9 +31,18 @@ export function IssueCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       onClick={onClick}
-      onKeyDown={(e) => e.key === "Enter" && onClick()}
-      role="button"
-      tabIndex={0}
+      {...(interactive
+        ? {
+            role: "button",
+            tabIndex: 0,
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              e.stopPropagation();
+              onClick();
+            },
+          }
+        : {})}
       className={`group cursor-pointer rounded-lg p-4 space-y-3 border border-solid transition-[border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--primary)_50%,transparent)] hover:shadow-[0_8px_28px_color-mix(in_srgb,var(--primary)_25%,transparent)] ${
         isLastOpened
           ? "border-(--border) border-l-2 border-l-(--primary) bg-white/4"
