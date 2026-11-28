@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Users } from "lucide-react";
+import { FolderKanban, Plus, Users } from "lucide-react";
 import { useUIStore } from "@/stores/useUIStore";
 import { useProjectsList } from "@/hooks/useProjectsList";
 import { ProjectsGridSkeleton } from "@/components/projects/ProjectsGridSkeleton";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 
 export function ProjectsView() {
   const setProjectModalOpen = useUIStore((s) => s.setProjectModalOpen);
-  const { projects, loading } = useProjectsList();
+  const { projects, loading, isError, isSuccess, error, refetch } = useProjectsList();
 
   if (loading) {
     return <ProjectsGridSkeleton />;
@@ -33,6 +34,31 @@ export function ProjectsView() {
         </button>
       </div>
 
+      {isError ? (
+        <QueryErrorState
+          message="Could not load projects."
+          error={error}
+          onRetry={() => void refetch()}
+        />
+      ) : isSuccess && projects.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-(--border) px-6 py-16 flex flex-col items-center text-center gap-4">
+          <FolderKanban className="w-8 h-8 text-linear-text-muted" aria-hidden="true" />
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">No projects yet</h3>
+            <p className="text-sm text-linear-text-muted max-w-sm">
+              Projects group issues, boards and members. Create one to get started.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setProjectModalOpen(true)}
+            className="linear-button-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create your first project
+          </button>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {projects.map((project) => (
           <Link
@@ -78,6 +104,7 @@ export function ProjectsView() {
           </Link>
         ))}
       </div>
+      )}
     </div>
   );
 }

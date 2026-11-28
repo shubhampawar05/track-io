@@ -61,6 +61,8 @@ jobs:
           cache: npm
           cache-dependency-path: Frontend/package-lock.json
       - run: npm ci
+      # next-env.d.ts and route types are generated (not tracked); create them before tsc.
+      - run: npx next typegen
       - run: npx eslint .
       - run: npx tsc --noEmit -p .
       - run: npm test
