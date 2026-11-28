@@ -13,4 +13,5 @@ Backend/node_modules/
 Frontend/node_modules/
 Backend/dist/
 Backend/uploads/
-docs
+# Top-level product docs only (a bare `docs` also matched Backend/src/docs and hid openapi.ts).
+/docs/
