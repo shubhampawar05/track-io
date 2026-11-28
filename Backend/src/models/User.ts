@@ -14,5 +14,8 @@ const userSchema = new Schema(
   { timestamps: true },
 );
 
+/** Password-reset lookups by token hash (most users have none: sparse). */
+userSchema.index({ passwordResetTokenHash: 1 }, { sparse: true });
+
 export type UserDoc = InferSchemaType<typeof userSchema> & { _id: mongoose.Types.ObjectId };
 export const User = mongoose.model("User", userSchema);

@@ -9,6 +9,11 @@ export const LIMITS = {
   /** Person, project and workspace names. */
   name: 100,
   email: 254,
+  /**
+   * Transcript text sent to the LLM. One shared limit: the upload/JSON endpoint rejects longer
+   * text with a clear error instead of the model silently seeing only the beginning.
+   */
+  transcript: 50_000,
 } as const;
 
 export function assertMaxLength(value: string, max: number, label: string): void {

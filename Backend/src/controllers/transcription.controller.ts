@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { HttpError } from "../middleware/errorHandler";
 import * as transcriptionService from "../services/transcription.service";
 import { fail, ok } from "../types/api";
+import { LIMITS } from "../utils/inputLimits";
 
 function transcriptTextFromRequest(req: Request): string {
   const body = req.body as { text?: unknown };
@@ -10,7 +11,9 @@ function transcriptTextFromRequest(req: Request): string {
   const fromFile = fileBuffer ? fileBuffer.toString("utf8") : "";
   const text = String(fromBody || fromFile || "").trim();
   if (!text) throw new HttpError(400, "Transcript text is required");
-  if (text.length > 200_000) throw new HttpError(400, "Transcript is too large");
+  if (text.length > LIMITS.transcript) {
+    throw new HttpError(400, `Transcript is too long (max ${LIMITS.transcript.toLocaleString("en-US")} characters)`);
+  }
   return text;
 }
 

@@ -35,7 +35,7 @@ export async function create(req: Request, res: Response) {
 
 export async function getBySlug(req: Request, res: Response) {
   try {
-    const slug = decodeURIComponent(String(req.params.slug));
+    const slug = String(req.params.slug);
     const data = await projectService.getProjectBySlug(req.organizationId!, req.userId!, slug);
     res.json(ok(data));
   } catch (e) {
@@ -50,7 +50,7 @@ export async function getBySlug(req: Request, res: Response) {
 /** PATCH project: boardColumns and/or githubRepoFullName (owner/admin for both). */
 export async function patchBySlug(req: Request, res: Response) {
   try {
-    const slug = decodeURIComponent(String(req.params.slug));
+    const slug = String(req.params.slug);
     const body = req.body as {
       boardColumns?: unknown;
       githubRepoFullName?: string | null;
@@ -99,7 +99,7 @@ export async function patchBySlug(req: Request, res: Response) {
 
 export async function listIssues(req: Request, res: Response) {
   try {
-    const slug = decodeURIComponent(String(req.params.slug));
+    const slug = String(req.params.slug);
     const query = issueService.parseIssueListQueryParams(req.query as Record<string, unknown>);
     const data = await issueService.listProjectIssues(req.organizationId!, req.userId!, slug, query);
     res.json(ok(data));
@@ -114,7 +114,7 @@ export async function listIssues(req: Request, res: Response) {
 
 export async function createIssue(req: Request, res: Response) {
   try {
-    const slug = decodeURIComponent(String(req.params.slug));
+    const slug = String(req.params.slug);
     const body = bodyObject(req.body);
     const data = await issueService.createIssueUnderProject(req.organizationId!, req.userId!, slug, {
       title: optionalString(body, "title") ?? "",
@@ -137,8 +137,8 @@ export async function createIssue(req: Request, res: Response) {
 
 export async function patchIssue(req: Request, res: Response) {
   try {
-    const slug = decodeURIComponent(String(req.params.slug));
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const slug = String(req.params.slug);
+    const issueId = String(req.params.issueId);
     const data = await issueService.patchIssueUnderProject(
       req.organizationId!,
       req.userId!,

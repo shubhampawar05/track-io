@@ -50,7 +50,7 @@ export async function createGlobal(req: Request, res: Response) {
 
 export async function getOne(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const issueId = String(req.params.issueId);
     const data = await issueService.getIssueDetail(req.organizationId!, req.userId!, issueId);
     res.json(ok(data));
   } catch (e) {
@@ -64,7 +64,7 @@ export async function getOne(req: Request, res: Response) {
 
 export async function patchOne(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const issueId = String(req.params.issueId);
     const data = await issueService.patchIssue(req.organizationId!, req.userId!, issueId, req.body as Record<string, unknown>);
     res.json(ok(data));
   } catch (e) {
@@ -78,7 +78,7 @@ export async function patchOne(req: Request, res: Response) {
 
 export async function deleteOne(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const issueId = String(req.params.issueId);
     await issueService.deleteIssue(
       req.organizationId!,
       req.userId!,
@@ -97,7 +97,7 @@ export async function deleteOne(req: Request, res: Response) {
 
 export async function postComment(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const issueId = String(req.params.issueId);
     const body = req.body as { body?: string; attachments?: unknown };
     const data = await issueService.addComment(
       req.organizationId!,
@@ -118,8 +118,8 @@ export async function postComment(req: Request, res: Response) {
 
 export async function patchComment(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
-    const commentId = decodeURIComponent(String(req.params.commentId));
+    const issueId = String(req.params.issueId);
+    const commentId = String(req.params.commentId);
     const body = req.body as { body?: string };
     const data = await issueService.updateComment(
       req.organizationId!,
@@ -140,7 +140,7 @@ export async function patchComment(req: Request, res: Response) {
 
 export async function postAttachment(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
+    const issueId = String(req.params.issueId);
     const body = req.body as { filename?: string; size?: number; mimeType?: string; url?: string };
     const data = await issueService.addAttachment(req.organizationId!, req.userId!, issueId, {
       filename: String(body.filename ?? "upload.bin"),
@@ -160,8 +160,8 @@ export async function postAttachment(req: Request, res: Response) {
 
 export async function deleteAttachment(req: Request, res: Response) {
   try {
-    const issueId = decodeURIComponent(String(req.params.issueId));
-    const attachmentId = decodeURIComponent(String(req.params.attachmentId));
+    const issueId = String(req.params.issueId);
+    const attachmentId = String(req.params.attachmentId);
     await issueService.removeAttachment(
       req.organizationId!,
       req.userId!,

@@ -97,6 +97,10 @@ export const env = {
   API_PUBLIC_URL: process.env.API_PUBLIC_URL?.trim() || "",
   NODE_ENV: process.env.NODE_ENV ?? "development",
   TRUST_PROXY: resolveTrustProxy(),
+  /** Serve Swagger UI + /api/openapi.json. Default: on outside production, off in production. */
+  ENABLE_API_DOCS: process.env.ENABLE_API_DOCS
+    ? process.env.ENABLE_API_DOCS.trim().toLowerCase() === "true"
+    : process.env.NODE_ENV?.trim() !== "production",
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID?.trim() ?? "",
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET?.trim() ?? "",
   GITHUB_OAUTH_CALLBACK_URL: process.env.GITHUB_OAUTH_CALLBACK_URL?.trim() ?? "",

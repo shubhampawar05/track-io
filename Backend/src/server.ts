@@ -20,8 +20,9 @@ async function main() {
     console.log(
       [
         `Trackio API listening on ${baseUrl}`,
-        `Swagger UI: ${baseUrl}/api/docs`,
-        `OpenAPI JSON: ${baseUrl}/api/openapi.json`,
+        ...(env.ENABLE_API_DOCS
+          ? [`Swagger UI: ${baseUrl}/api/docs`, `OpenAPI JSON: ${baseUrl}/api/openapi.json`]
+          : []),
       ].join("\n"),
     );
   });

@@ -8,6 +8,7 @@ import type { BoardColumnDto } from "../utils/boardColumns";
 import { effectiveProjectBoardColumns } from "../utils/boardColumns";
 import { normalizeGithubRepoFullNameInput } from "../utils/githubUrlParse";
 import { LIMITS, assertMaxLength } from "../utils/inputLimits";
+import { isDuplicateKeyError } from "../utils/mongoErrors";
 import { keyPrefixFromName, slugifyName } from "../utils/slug";
 
 const COLORS = ["bg-indigo-500", "bg-purple-500", "bg-blue-500", "bg-emerald-500", "bg-rose-500"];
@@ -64,10 +65,6 @@ export async function listProjects(organizationId: mongoose.Types.ObjectId, user
   const uid = new mongoose.Types.ObjectId(userId);
   const list = await Project.find({ organizationId, memberIds: uid }).sort({ name: 1 }).lean();
   return list.map(toCard);
-}
-
-function isDuplicateKeyError(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: number }).code === 11000;
 }
 
 async function findFreeSlug(organizationId: mongoose.Types.ObjectId, base: string): Promise<string> {

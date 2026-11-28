@@ -5,7 +5,11 @@
 export function normalizeGithubRepoFullNameInput(raw: string): string {
   const s = raw.trim();
   if (!s) return "";
-  const fromUrl = s.match(/github\.com\/([^/]+)\/([^/?#]+)/i);
+  // Host must be exactly github.com (optionally www.), e.g. not "evilgithub.com/…";
+  // also accepts the SSH form git@github.com:owner/repo(.git).
+  const fromUrl =
+    s.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^/?#\s]+)/i) ??
+    s.match(/^git@github\.com:([^/\s]+)\/([^/?#\s]+)$/i);
   if (fromUrl) {
     const owner = fromUrl[1];
     const repo = fromUrl[2].replace(/\.git$/i, "");

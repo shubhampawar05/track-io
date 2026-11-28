@@ -872,8 +872,9 @@ async function loadIssueForUser(
   if (!project || !project.organizationId.equals(organizationId))
     throw new HttpError(404, "Issue not found");
   const uid = new mongoose.Types.ObjectId(userId);
+  // Same 404 as a missing issue, so non-members cannot probe which issue keys exist.
   if (!project.memberIds.some((m) => m.equals(uid)))
-    throw new HttpError(403, "Forbidden");
+    throw new HttpError(404, "Issue not found");
   return {
     issue: issue as unknown as IssueDoc,
     project: {
