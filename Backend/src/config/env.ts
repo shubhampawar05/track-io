@@ -10,7 +10,7 @@ const KNOWN_PLACEHOLDER_SECRETS = new Set([
 ]);
 
 /** Only an explicit local environment may fall back to an insecure secret. */
-function isLocalDevEnvironment(): boolean {
+export function isLocalDevEnvironment(): boolean {
   const nodeEnv = process.env.NODE_ENV?.trim();
   return nodeEnv === "development" || nodeEnv === "test";
 }
@@ -32,15 +32,47 @@ function resolveJwtSecret(): string {
   return s.length >= 16 ? s : DEV_JWT_FALLBACK;
 }
 
+const MIN_ENCRYPTION_KEY_LENGTH = 32;
+/** Older keys (before key versioning) could be 16+ chars; accepted only for decrypting. */
+const MIN_PREVIOUS_KEY_LENGTH = 16;
+
+/**
+ * Key that encrypts stored GitHub secrets (OAuth access tokens, webhook signing secrets).
+ * Optional in development/test (a key derived from JWT_SECRET is used, with a warning);
+ * required in production as soon as GitHub OAuth is configured, and checked again whenever
+ * a secret is stored or read.
+ */
 function resolveGithubEncryptionKey(): string {
   const k = process.env.GITHUB_OAUTH_ENCRYPTION_KEY?.trim() ?? "";
-  if (k.length >= 16) return k;
-  if (process.env.NODE_ENV === "production" && process.env.GITHUB_CLIENT_ID?.trim()) {
-    throw new Error(
-      "GITHUB_OAUTH_ENCRYPTION_KEY must be set (min 16 chars) when GITHUB_CLIENT_ID is set in production",
-    );
+  if (k) {
+    if (k.length < MIN_ENCRYPTION_KEY_LENGTH) {
+      throw new Error(
+        `GITHUB_OAUTH_ENCRYPTION_KEY must be at least ${MIN_ENCRYPTION_KEY_LENGTH} characters ` +
+          "(openssl rand -base64 48). If you used a shorter key before, move it to " +
+          "GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS and run `npm run migrate:secrets`.",
+      );
+    }
+    return k;
+  }
+  if (!isLocalDevEnvironment() && process.env.GITHUB_CLIENT_ID?.trim()) {
+    throw new Error("GITHUB_OAUTH_ENCRYPTION_KEY must be set when GITHUB_CLIENT_ID is set outside development");
   }
   return "";
+}
+
+/** Retired keys (comma-separated), kept only so existing secrets can be decrypted and re-encrypted. */
+function resolvePreviousGithubEncryptionKeys(): string[] {
+  const raw = process.env.GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS ?? "";
+  const keys = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const k of keys) {
+    if (k.length < MIN_PREVIOUS_KEY_LENGTH) {
+      throw new Error(`Each GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS entry must be at least ${MIN_PREVIOUS_KEY_LENGTH} characters`);
+    }
+  }
+  return keys;
 }
 
 function resolvePort(): number {
@@ -105,6 +137,7 @@ export const env = {
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET?.trim() ?? "",
   GITHUB_OAUTH_CALLBACK_URL: process.env.GITHUB_OAUTH_CALLBACK_URL?.trim() ?? "",
   GITHUB_OAUTH_ENCRYPTION_KEY: resolveGithubEncryptionKey(),
+  GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS: resolvePreviousGithubEncryptionKeys(),
   /** SMTP (optional in dev; password reset / invites log to console when unset). */
   SMTP_HOST: process.env.SMTP_HOST?.trim() ?? "",
   SMTP_PORT: resolveSmtpPort(),

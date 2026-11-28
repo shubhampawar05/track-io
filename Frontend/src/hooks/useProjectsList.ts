@@ -20,6 +20,7 @@ export function useProjectsList() {
     projects: query.data ?? [],
     loading: query.isLoading,
     isError: query.isError,
+    isSuccess: query.isSuccess,
     error: query.error,
     refetch: query.refetch,
   };

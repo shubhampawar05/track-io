@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Organization } from "../models/Organization";
 import { verifyGithubWebhookSignature } from "../utils/githubWebhookSignature";
+import { isSealed, openSecret } from "../utils/secretBox";
 import { collectDisplayIdsForGithubPayload, repoFullNameAllowedForOrg, upsertGithubLinksForIssues } from "./githubLink.service";
 
 type PullRequestPayload = {
@@ -43,7 +44,15 @@ export async function handleGithubWebhook(
   if (!org || !org.githubWebhookSecret) {
     return { ok: false, status: 404, message: "Not found" };
   }
-  if (!verifyGithubWebhookSignature(rawBody, signatureHeader, org.githubWebhookSecret)) {
+  let secret: string;
+  try {
+    // Sealed (v2) secrets are decrypted; legacy plaintext secrets still work until migrated.
+    secret = isSealed(org.githubWebhookSecret) ? openSecret(org.githubWebhookSecret) : org.githubWebhookSecret;
+  } catch (err) {
+    console.error("GitHub webhook secret could not be decrypted (check encryption keys)", err);
+    return { ok: false, status: 500, message: "Webhook secret unavailable" };
+  }
+  if (!verifyGithubWebhookSignature(rawBody, signatureHeader, secret)) {
     return { ok: false, status: 401, message: "Invalid signature" };
   }
 

@@ -17,7 +17,9 @@
     "test:recording": "tsx src/scripts/test-recording.ts",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "migrate:secrets": "tsx src/scripts/migrate-secrets.ts",
+    "migrate:sort-order": "tsx src/scripts/migrate-sort-order.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

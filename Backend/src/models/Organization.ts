@@ -9,7 +9,10 @@ const organizationSchema = new Schema(
     issuesBoardColumns: boardColumnsArrayPath,
     /** Opaque segment in webhook URL; unguessable. Set only when webhook is configured. */
     githubWebhookPathToken: { type: String, trim: true },
-    /** Shared secret for GitHub webhook HMAC (X-Hub-Signature-256). */
+    /**
+     * Shared secret for GitHub webhook HMAC (X-Hub-Signature-256), stored sealed (utils/secretBox).
+     * Legacy plaintext values are still accepted until `npm run migrate:secrets` seals them.
+     */
     githubWebhookSecret: { type: String, trim: true },
   },
   { timestamps: true },

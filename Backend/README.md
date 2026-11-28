@@ -86,6 +86,31 @@ npm run db:reset
 > npm run db:reset -- --allow-remote=trackio
 > ```
 
+### Maintenance scripts (safe for production)
+
+Both print the target database and do nothing without `--dry-run` (preview) or `--yes` (apply). Both are idempotent.
+
+| Command | What it does |
+|---|---|
+| `npm run migrate:secrets -- --yes` | Re-encrypts stored GitHub OAuth tokens and webhook secrets with the current `GITHUB_OAUTH_ENCRYPTION_KEY` (v2 versioned format). Run after first setting the key and after every key rotation. Add `--delete-undecryptable-tokens` to drop GitHub connections no configured key can decrypt (those workspaces reconnect GitHub). |
+| `npm run migrate:sort-order -- --yes` | Renumbers board card positions per project column (1000, 2000, …) keeping the current order. Run once on existing data. |
+
+**Upgrading GitHub secret encryption on an existing deployment**
+
+1. Generate a key: `openssl rand -base64 48` → `GITHUB_OAUTH_ENCRYPTION_KEY`.
+2. If you had an older key set, move it to `GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS`. If you never had one, keep the current `JWT_SECRET` unchanged for now (old tokens were derived from it).
+3. Deploy, then `npm run migrate:secrets -- --dry-run` and `npm run migrate:secrets -- --yes`.
+4. Now you can remove the old key / rotate `JWT_SECRET`. Webhooks keep working throughout (legacy plaintext secrets are accepted until migrated).
+
+### Tests
+
+```bash
+npm test          # vitest + supertest against an in-memory MongoDB (or TEST_MONGODB_URI)
+npm run typecheck # src + tests
+```
+
+Tests force empty SMTP/OpenAI/GitHub settings, so they never use the real services in your `.env`.
+
 ### Seed demo data (optional, first-time)
 
 Creates a full demo workspace: members (including an **admin**), custom board columns, sprints, issues (all statuses and priorities, subtasks with links, attachments, GitHub links), comments, pending/cancelled invites, transcription rows, GitHub OAuth row (placeholder token), and org webhook URL fields. The script prints the **webhook URL** and **pending invite token** to the console when it finishes.

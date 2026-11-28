@@ -11,6 +11,7 @@ import {
   unionColumnsFromProjects,
 } from "../utils/boardColumns";
 import { LIMITS, assertMaxLength } from "../utils/inputLimits";
+import { sealSecret } from "../utils/secretBox";
 import { publicApiBase } from "../utils/uploadUrl";
 
 export type OrganizationMemberDto = {
@@ -117,7 +118,8 @@ export async function setupGithubWebhookCredentials(
   const org = await Organization.findById(organizationId);
   if (!org) throw new HttpError(404, "Organization not found");
   org.githubWebhookPathToken = pathToken;
-  org.githubWebhookSecret = secret;
+  // Stored sealed; the plaintext is returned exactly once so the admin can paste it into GitHub.
+  org.githubWebhookSecret = sealSecret(secret);
   await org.save();
   const base = publicApiBase();
   const webhookUrl = `${base}/api/integrations/github/webhook/${pathToken}`;
