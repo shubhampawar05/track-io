@@ -151,6 +151,7 @@ export async function extractCandidatesWithLlm(transcriptText: string): Promise<
       throw new HttpError(502, "OpenAI rate limit or quota exceeded.");
     }
     // Keep upstream details in server logs only; clients get a generic message.
+    // eslint-disable-next-line no-console
     console.error("OpenAI extraction failed", e?.status, e?.message);
     throw new HttpError(502, "Failed to extract tasks from transcription");
   }

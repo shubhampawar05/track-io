@@ -138,6 +138,7 @@ export async function transcribeRecording(
       await deleteAudioFromGridFs(fileId);
       await TranscriptionRecording.updateOne({ _id: row._id }, { $unset: { gridFsFileId: 1 } });
     } catch (cleanupError) {
+      // eslint-disable-next-line no-console
       console.error("TranscriptionRecording GridFS cleanup failed", cleanupError);
     }
     return {

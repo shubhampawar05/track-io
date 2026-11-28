@@ -14,6 +14,7 @@ import {
 import { apiJson, apiUploadForm } from "@/lib/api-client";
 import type { ProjectCard, TranscriptionCandidate } from "@/types/issue";
 import { useRecordingSessionStore } from "@/stores/useRecordingSessionStore";
+import { useModalDialog } from "@/hooks/useModalDialog";
 import { useUIStore } from "@/stores/useUIStore";
 import {
   Select,
@@ -122,6 +123,9 @@ export function ExtractTasksModal({
     if (!projectSlug) return "";
     return projects.find((p) => p.slug === projectSlug)?.name ?? "";
   }, [projectSlug, projects]);
+
+  // Focus trap + focus restore; Escape is handled below (it depends on the upload state).
+  const dialogRef = useModalDialog(isOpen, null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -286,6 +290,7 @@ export function ExtractTasksModal({
             initial={{ opacity: 0, scale: 0.98, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 20 }}
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="extract-tasks-title"

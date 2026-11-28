@@ -59,6 +59,10 @@ function IssueDetailPageInner() {
     queryKey: ["issue", organizationId, id],
     enabled: Boolean(organizationId && id),
     queryFn: ({ queryKey }) => loadIssueDetail(id, queryKey[1]),
+    // A missing issue or expired session will not fix itself; show the 404 / redirect at once.
+    retry: (failureCount, error) =>
+      !(error instanceof Error && (error.message === "NOT_FOUND" || error.message === "UNAUTHORIZED")) &&
+      failureCount < 3,
   });
 
   useEffect(() => {

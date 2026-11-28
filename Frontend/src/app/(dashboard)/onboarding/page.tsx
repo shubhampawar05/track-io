@@ -90,14 +90,9 @@ export default function OnboardingPage() {
               onClick={() => {
                 void (async () => {
                   setBusy(true);
-                  try {
-                    await logout();
-                  } catch {
-                    // logout() always clears local session state.
-                  } finally {
-                    queryClient.clear();
-                    setBusy(false);
-                  }
+                  await logout();
+                  queryClient.clear();
+                  setBusy(false);
                   router.replace("/");
                 })();
               }}

@@ -127,16 +127,12 @@ export function Sidebar() {
           className="linear-sidebar-item w-full text-left text-red-500 hover:bg-red-500/10"
           onClick={() => {
             void (async () => {
-              let ok = true;
-              try {
-                await logout();
-              } catch {
-                ok = false;
-              } finally {
-                queryClient.clear();
-              }
+              const ok = await logout();
+              queryClient.clear();
               showToast(
-                ok ? "Logged out successfully" : "Signed out on this device; the server could not be reached",
+                ok
+                  ? "Logged out successfully"
+                  : "Signed out on this device, but the server could not end the session. Sign out again when you are back online.",
                 ok ? "success" : "error",
               );
               router.push("/");

@@ -31,7 +31,7 @@ Copy `.env.example` to `.env` and fill in values:
 | `SKIP_STARTER_ISSUES` | Optional. Set to `true` to skip creating the three **getting-started** issues when a new project is created (default is to create them). |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Optional. Enable GitHub OAuth for the Integrations page. |
 | `GITHUB_OAUTH_CALLBACK_URL` | Full URL to `GET /api/integrations/github/callback` (must match the GitHub OAuth App callback URL). |
-| `GITHUB_OAUTH_ENCRYPTION_KEY` | Optional in development (falls back to hashing `JWT_SECRET`). In **production**, required (min 16 characters) when `GITHUB_CLIENT_ID` is set; used to encrypt stored OAuth tokens. |
+| `GITHUB_OAUTH_ENCRYPTION_KEY` | Optional in development (falls back to a key derived from `JWT_SECRET`). Outside development it must be at least **32 characters** (`openssl rand -base64 48`); the API refuses to boot without it when `GITHUB_CLIENT_ID` is set, and GitHub webhook setup returns 503 without it. Encrypts stored OAuth tokens and webhook secrets. To rotate (or upgrade an older 16–31 character key), move the old value to `GITHUB_OAUTH_ENCRYPTION_KEY_PREVIOUS` and run `npm run migrate:secrets`. |
 | `OPENAI_API_KEY` | Required for transcription extraction endpoint (`POST /api/transcriptions/extract`). |
 | `OPENAI_MODEL` | Optional. OpenAI model used for extraction (default `gpt-4.1-mini`). |
 | `OPENAI_TRANSCRIBE_MODEL` | Optional. OpenAI model for audio-to-text transcription (default `gpt-4o-mini-transcribe`). |

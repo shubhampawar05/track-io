@@ -7,14 +7,17 @@ import { fail, ok } from "../types/api";
 export async function listAll(req: Request, res: Response) {
   try {
     const query = issueService.parseIssueListQueryParams(req.query as Record<string, unknown>);
-    const { issues, total, truncated } = await issueService.listAllIssues(
+    const page = issueService.parseIssueListPage(req.query as Record<string, unknown>);
+    const { issues, total, nextOffset } = await issueService.listAllIssues(
       req.organizationId!,
       req.userId!,
       query,
+      page,
     );
-    // Body stays a plain array for compatibility; truncation is signalled via headers.
+    // Body stays a plain array for compatibility; paging is signalled via headers.
     res.setHeader("X-Total-Count", String(total));
-    res.setHeader("X-Results-Truncated", truncated ? "true" : "false");
+    res.setHeader("X-Results-Truncated", nextOffset !== null ? "true" : "false");
+    if (nextOffset !== null) res.setHeader("X-Next-Offset", String(nextOffset));
     res.json(ok(issues));
   } catch (e) {
     if (e instanceof HttpError) {

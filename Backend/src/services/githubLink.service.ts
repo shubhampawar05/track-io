@@ -19,11 +19,6 @@ export type GithubLinkLean = {
   updatedAt: Date;
 };
 
-export async function keyPrefixesForOrganization(organizationId: mongoose.Types.ObjectId): Promise<string[]> {
-  const rows = await Project.find({ organizationId }).select("keyPrefix").lean();
-  return [...new Set(rows.map((r) => r.keyPrefix).filter(Boolean))];
-}
-
 function repoFullNameFilter(repoFullName: string): RegExp | null {
   const normalized = repoFullName.trim().toLowerCase().replace(/\.git$/i, "");
   if (!normalized) return null;
@@ -125,19 +120,16 @@ export async function upsertGithubLinksForIssues(
 }
 
 /**
- * Issue keys mentioned in branch names / PR text. When `repoFullName` is given (webhooks), only
- * keys of projects linked to that repository count, so a PR in repo A cannot attach links to
- * issues of an unrelated project B that happens to be mentioned.
+ * Issue keys mentioned in branch names / PR text. Only keys of projects linked to `repoFullName`
+ * count, so a PR in repo A cannot attach links to issues of an unrelated project B that happens
+ * to be mentioned.
  */
 export async function collectDisplayIdsForGithubPayload(
   organizationId: mongoose.Types.ObjectId,
   parts: string[],
-  repoFullName?: string,
+  repoFullName: string,
 ): Promise<string[]> {
-  const prefixes =
-    repoFullName !== undefined
-      ? await keyPrefixesForRepo(organizationId, repoFullName)
-      : await keyPrefixesForOrganization(organizationId);
+  const prefixes = await keyPrefixesForRepo(organizationId, repoFullName);
   const seen = new Set<string>();
   const out: string[] = [];
   for (const text of parts) {

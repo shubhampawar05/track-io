@@ -73,25 +73,12 @@ function organizationHeader(explicit?: string | null): Record<string, string> {
   return typeof orgId === "string" && orgId.length > 0 ? { "X-Organization-Id": orgId } : {};
 }
 
+/** JSON request to the API. Never rejects: network and parse failures resolve to a failed envelope. */
 export async function apiJson<T>(
   path: string,
   init?: ApiJsonInit,
 ): Promise<ApiResponse<T>> {
-  const { body, headers, orgId, ...rest } = init ?? {};
-  const orgHeader = organizationHeader(orgId);
-  const res = await safeFetch(resolveUrl(path), {
-    ...rest,
-    credentials: "include",
-    headers: {
-      ...jsonHeaders,
-      ...orgHeader,
-      ...(headers as Record<string, string>),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (!res) return fail(NETWORK_ERROR_MESSAGE);
-  noteStatus(res.status);
-  return readPayload<T>(res);
+  return (await apiJsonWithStatus<T>(path, init)).payload;
 }
 
 /** Same as `apiJson` but includes HTTP status for callers that must distinguish 401 vs 404. */
@@ -99,6 +86,15 @@ export async function apiJsonWithStatus<T>(
   path: string,
   init?: ApiJsonInit,
 ): Promise<{ status: number; payload: ApiResponse<T> }> {
+  const { status, payload } = await apiJsonWithHeaders<T>(path, init);
+  return { status, payload };
+}
+
+/** Same as `apiJsonWithStatus` plus response headers (e.g. paging headers). */
+export async function apiJsonWithHeaders<T>(
+  path: string,
+  init?: ApiJsonInit,
+): Promise<{ status: number; headers: Headers; payload: ApiResponse<T> }> {
   const { body, headers, orgId, ...rest } = init ?? {};
   const orgHeader = organizationHeader(orgId);
   const res = await safeFetch(resolveUrl(path), {
@@ -111,10 +107,10 @@ export async function apiJsonWithStatus<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res) return { status: 0, payload: fail(NETWORK_ERROR_MESSAGE) };
+  if (!res) return { status: 0, headers: new Headers(), payload: fail(NETWORK_ERROR_MESSAGE) };
   noteStatus(res.status);
   const payload = await readPayload<T>(res);
-  return { status: res.status, payload };
+  return { status: res.status, headers: res.headers, payload };
 }
 
 export type UploadResult = { url: string; filename: string; size: number; mimeType: string };

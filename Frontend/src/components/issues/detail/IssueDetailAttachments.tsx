@@ -6,6 +6,7 @@ import { AlertCircle, List as ListIcon, Paperclip, Plus, Trash2, X } from "lucid
 import { apiJson, apiBaseUrl, apiUploadFile } from "@/lib/api-client";
 import type { IssueAttachment, IssueDetail } from "@/types/issue";
 import { useUIStore } from "@/stores/useUIStore";
+import { useModalDialog } from "@/hooks/useModalDialog";
 import {
   formatMaxUploadSize,
   MAX_ISSUE_ATTACHMENTS,
@@ -69,6 +70,7 @@ export function IssueDetailAttachments({
   const [busy, setBusy] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ href: string; filename: string } | null>(null);
+  const previewDialogRef = useModalDialog(preview !== null, () => setPreview(null));
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = async (files: FileList | null) => {
@@ -325,6 +327,7 @@ export function IssueDetailAttachments({
       </div>
       {preview ? (
         <div
+          ref={previewDialogRef}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           role="dialog"
           aria-modal="true"

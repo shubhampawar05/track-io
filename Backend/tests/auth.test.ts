@@ -110,6 +110,37 @@ describe("sessions", () => {
     expect(again.status).toBe(400);
   });
 
+  it("a reset token can be used only once even by concurrent requests", async () => {
+    const { User } = await import("../src/models/User");
+    const { hashToken } = await import("../src/utils/tokenCrypto");
+    await registerUser(app, "Race", "race-reset@test.local");
+    await User.updateOne(
+      { email: "race-reset@test.local" },
+      { passwordResetTokenHash: hashToken("race-token"), passwordResetExpiresAt: new Date(Date.now() + 60_000) },
+    );
+    const results = await Promise.all(
+      ["first-password-1", "second-password-2", "third-password-3"].map((password) =>
+        request(app).post("/api/auth/reset-password").set("X-Forwarded-For", nextIp()).send({ token: "race-token", password }),
+      ),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([200, 400, 400]);
+  });
+
+  it("rejects an expired reset token", async () => {
+    const { User } = await import("../src/models/User");
+    const { hashToken } = await import("../src/utils/tokenCrypto");
+    await registerUser(app, "Expired", "expired-reset@test.local");
+    await User.updateOne(
+      { email: "expired-reset@test.local" },
+      { passwordResetTokenHash: hashToken("old-token"), passwordResetExpiresAt: new Date(Date.now() - 1000) },
+    );
+    const res = await request(app)
+      .post("/api/auth/reset-password")
+      .set("X-Forwarded-For", nextIp())
+      .send({ token: "old-token", password: "whatever-password" });
+    expect(res.status).toBe(400);
+  });
+
   it("forgot-password answers identically for known and unknown emails", async () => {
     await registerUser(app, "Known", "known@test.local");
     const known = await request(app).post("/api/auth/forgot-password").set("X-Forwarded-For", nextIp()).send({ email: "known@test.local" });

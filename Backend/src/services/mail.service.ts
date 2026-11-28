@@ -21,10 +21,6 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-export function isMailConfigured(): boolean {
-  return Boolean(env.SMTP_HOST && env.MAIL_FROM);
-}
-
 export type SendMailInput = {
   to: string;
   subject: string;

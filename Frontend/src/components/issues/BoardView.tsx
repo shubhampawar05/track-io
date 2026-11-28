@@ -48,7 +48,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { useModalDialog } from "@/hooks/useModalDialog";
-import { IssuePipelineFilterChipsRow } from "@/components/issues/ListView";
+import { IssueListTruncatedNotice, IssuePipelineFilterChipsRow } from "@/components/issues/ListView";
 import { IssuesBoardSkeleton } from "@/components/issues/IssuesBoardSkeleton";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { buildIssueDetailUrl } from "@/lib/issue-detail-from";
@@ -81,8 +81,11 @@ export function BoardView({
   issueNavFrom = "board",
   issueNavProjectView = "board",
   appliedPipelineFilters,
+  totalCount,
 }: {
   issues: Issue[];
+  /** Server-side match count; a notice is shown when it exceeds `issues.length`. */
+  totalCount?: number;
   loading?: boolean;
   /** Load failure for `issues`; renders an error state instead of empty columns. */
   error?: unknown;
@@ -602,6 +605,7 @@ export function BoardView({
         {appliedPipelineFilters ? (
           <IssuePipelineFilterChipsRow applied={appliedPipelineFilters} />
         ) : null}
+        <IssueListTruncatedNotice shown={issues.length} total={totalCount} />
         <div className="flex w-full min-w-0 gap-6 h-[calc(100vh-3.5rem)] overflow-x-auto custom-scrollbar">
           {columns.map((col) => (
             <BoardColumn

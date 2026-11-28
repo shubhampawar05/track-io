@@ -8,6 +8,11 @@ export function boardStatusRank(status: string): number {
   return i === -1 ? 1000 : i;
 }
 
+/** Tie-break by key with numeric awareness so ABC-9 sorts before ABC-10 (matches backend `number` order). */
+function compareIssueKeys(a: Issue, b: Issue): number {
+  return (a.key ?? a.id).localeCompare(b.key ?? b.id, undefined, { numeric: true });
+}
+
 /** Match backend list ordering for cross-project issue lists. */
 export function compareIssuesBoard(a: Issue, b: Issue): number {
   const sr = boardStatusRank(a.status) - boardStatusRank(b.status);
@@ -19,14 +24,14 @@ export function compareIssuesBoard(a: Issue, b: Issue): number {
   const oa = a.sortOrder ?? 0;
   const ob = b.sortOrder ?? 0;
   if (oa !== ob) return oa - ob;
-  return (a.key ?? a.id).localeCompare(b.key ?? b.id);
+  return compareIssueKeys(a, b);
 }
 
 function sortIssuesWithinStatus(a: Issue, b: Issue): number {
   const oa = a.sortOrder ?? 0;
   const ob = b.sortOrder ?? 0;
   if (oa !== ob) return oa - ob;
-  return (a.key ?? a.id).localeCompare(b.key ?? b.id);
+  return compareIssueKeys(a, b);
 }
 
 /** Ordered issue ids per column status (board columns). */

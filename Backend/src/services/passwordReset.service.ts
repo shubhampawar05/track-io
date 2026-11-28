@@ -41,18 +41,17 @@ export async function resetPasswordWithToken(tokenRaw: string, newPassword: stri
   if (!token || !newPassword || newPassword.length < 8) {
     throw new HttpError(400, "Invalid token or password (min 8 characters)");
   }
-  const tokenHash = hashToken(token);
-  const user = await User.findOne({ passwordResetTokenHash: tokenHash }).exec();
-  if (!user || !user.passwordResetExpiresAt) {
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  // Consume the token atomically so two concurrent requests cannot both use it.
+  // Bumping tokenVersion signs out every existing session (the old password may be compromised).
+  const user = await User.findOneAndUpdate(
+    { passwordResetTokenHash: hashToken(token), passwordResetExpiresAt: { $gt: new Date() } },
+    {
+      $set: { passwordHash, passwordResetTokenHash: null, passwordResetExpiresAt: null },
+      $inc: { tokenVersion: 1 },
+    },
+  ).exec();
+  if (!user) {
     throw new HttpError(400, "Invalid or expired reset link");
   }
-  if (user.passwordResetExpiresAt.getTime() < Date.now()) {
-    throw new HttpError(400, "Invalid or expired reset link");
-  }
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  user.passwordResetTokenHash = null;
-  user.passwordResetExpiresAt = null;
-  // Sign out every existing session: a reset usually means the old password may be compromised.
-  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-  await user.save();
 }

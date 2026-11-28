@@ -20,6 +20,9 @@ import { transcriptionRoutes } from "./routes/transcription.routes";
 import { uploadRoutes } from "./routes/upload.routes";
 import swaggerUi from "swagger-ui-express";
 
+/** Max JSON request body. Must stay well above LIMITS.issueDescription (see tests/limits). */
+export const JSON_BODY_LIMIT = "1mb";
+
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
@@ -30,7 +33,7 @@ export function createApp() {
     cors({
       origin: env.CORS_ORIGINS,
       credentials: true,
-      exposedHeaders: ["X-Total-Count", "X-Results-Truncated", "Retry-After"],
+      exposedHeaders: ["X-Total-Count", "X-Results-Truncated", "X-Next-Offset", "Retry-After"],
     }),
   );
   app.post(
@@ -39,7 +42,9 @@ export function createApp() {
     express.raw({ type: "application/json", limit: "5mb" }),
     (req, res) => void githubWebhookController.postGithubWebhook(req, res),
   );
-  app.use(express.json());
+  // Sized for the largest text field (LIMITS.issueDescription chars of HTML, which can be
+  // several bytes per char once UTF-8 + JSON-escaped); per-field limits are enforced by services.
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   // Express 5 leaves req.body undefined when there is no body; controllers expect an object.
   app.use((req, _res, next) => {
     if (req.body === undefined) req.body = {};

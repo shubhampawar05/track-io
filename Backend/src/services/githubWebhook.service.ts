@@ -49,6 +49,7 @@ export async function handleGithubWebhook(
     // Sealed (v2) secrets are decrypted; legacy plaintext secrets still work until migrated.
     secret = isSealed(org.githubWebhookSecret) ? openSecret(org.githubWebhookSecret) : org.githubWebhookSecret;
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("GitHub webhook secret could not be decrypted (check encryption keys)", err);
     return { ok: false, status: 500, message: "Webhook secret unavailable" };
   }
