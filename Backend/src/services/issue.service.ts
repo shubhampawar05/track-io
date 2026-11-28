@@ -10,7 +10,14 @@ import { formatRelative } from "../utils/formatRelative";
 import { deleteAttachmentFromGridFs, getAttachmentFileMeta } from "./attachmentStorage.service";
 import { attachmentGridFsIdFromTrustedUrl, isTrustedUploadUrl } from "../utils/uploadUrl";
 import { assertProjectMember } from "./project.service";
-import { isValidStatusSlug } from "../utils/boardColumns";
+import {
+  effectiveProjectBoardColumns,
+  isValidStatusSlug,
+  normalizeBoardColumnsFromDoc,
+  unionColumnsFromProjects,
+} from "../utils/boardColumns";
+import { Organization } from "../models/Organization";
+import { LIMITS, assertMaxLength } from "../utils/inputLimits";
 
 type Priority = "low" | "medium" | "high" | "urgent" | "none";
 
@@ -274,6 +281,40 @@ async function isAttachmentFileStillReferenced(
   return Boolean(onIssue || onComment);
 }
 
+/**
+ * Issue statuses must be a column some board can show: the issue's project board, the org-wide
+ * issues board, or any project board in the org (the global board is their union). Anything else
+ * would make the issue disappear from every board.
+ */
+async function resolveKnownIssueStatus(
+  organizationId: mongoose.Types.ObjectId,
+  projectBoardColumns: unknown,
+  raw: string,
+): Promise<string> {
+  const status = raw.trim().toLowerCase();
+  if (!isValidStatusSlug(status)) throw new HttpError(400, "Invalid status");
+  const has = (cols: { status: string }[] | null | undefined) =>
+    Boolean(cols?.some((c) => c.status === status));
+  if (has(effectiveProjectBoardColumns({ boardColumns: projectBoardColumns }))) return status;
+  const org = await Organization.findById(organizationId).select("issuesBoardColumns").lean();
+  if (has(normalizeBoardColumnsFromDoc(org?.issuesBoardColumns))) return status;
+  const projects = await Project.find({ organizationId }).select("boardColumns").lean();
+  if (has(unionColumnsFromProjects(projects))) return status;
+  throw new HttpError(400, "Status is not a column on this board");
+}
+
+function readTitlePatch(raw: string): string {
+  const title = raw.trim();
+  if (!title) throw new HttpError(400, "Title is required");
+  assertMaxLength(title, LIMITS.issueTitle, "Title");
+  return title;
+}
+
+function readDescriptionPatch(raw: string): string {
+  assertMaxLength(raw, LIMITS.issueDescription, "Description");
+  return raw;
+}
+
 export type GithubLinkDto = {
   id: string;
   kind: "pull_request" | "branch";
@@ -408,18 +449,28 @@ async function assertLinkedSubtasksAllowed(
   }
 }
 
+function existingSubtaskLinks(issue: { subtasks?: unknown }): string[] {
+  const list = Array.isArray(issue.subtasks) ? (issue.subtasks as { linkedIssueId?: unknown }[]) : [];
+  return list
+    .map((s) => (typeof s?.linkedIssueId === "string" ? s.linkedIssueId : ""))
+    .filter(Boolean);
+}
+
 async function normalizeSubtasksPatch(
   raw: unknown,
   ctx: {
     organizationId: mongoose.Types.ObjectId;
     userId: string;
     parentDisplayId: string;
+    /** Links already stored on the issue; only newly added links are re-validated. */
+    existingLinkedIds: string[];
   },
 ): Promise<IssueSubtaskDto[]> {
   if (!Array.isArray(raw)) throw new HttpError(400, "Invalid subtasks");
   if (raw.length > MAX_SUBTASKS) throw new HttpError(400, "Too many subtasks");
   const out: IssueSubtaskDto[] = [];
   const linkedToValidate: string[] = [];
+  const existingLinked = new Set(ctx.existingLinkedIds);
   for (const item of raw) {
     if (!item || typeof item !== "object")
       throw new HttpError(400, "Invalid subtasks");
@@ -440,7 +491,9 @@ async function normalizeSubtasksPatch(
         throw new HttpError(400, "Invalid subtasks");
       }
     }
-    if (linkedIssueId) linkedToValidate.push(linkedIssueId);
+    // Existing links may point at issues that were since deleted or moved out of reach; they
+    // must not block unrelated edits (e.g. ticking another subtask). Only new links are checked.
+    if (linkedIssueId && !existingLinked.has(linkedIssueId)) linkedToValidate.push(linkedIssueId);
     out.push({
       id,
       title,
@@ -722,13 +775,18 @@ async function projectIdsForUser(
   return projects.map((p) => p._id);
 }
 
+/** Max issues returned by the org-wide list; beyond this the oldest-updated issues are left out. */
+export const ORG_ISSUE_LIST_LIMIT = 1000;
+
+export type OrgIssueListResult = { issues: IssueListDto[]; total: number; truncated: boolean };
+
 export async function listAllIssues(
   organizationId: mongoose.Types.ObjectId,
   userId: string,
   query?: IssueListQueryParams,
-): Promise<IssueListDto[]> {
+): Promise<OrgIssueListResult> {
   const pids = await projectIdsForUser(organizationId, userId);
-  if (pids.length === 0) return [];
+  if (pids.length === 0) return { issues: [], total: 0, truncated: false };
   const filterParts: Record<string, unknown>[] = [
     { organizationId },
     { projectId: { $in: pids } },
@@ -736,7 +794,14 @@ export async function listAllIssues(
   ];
   const filter =
     filterParts.length === 1 ? filterParts[0]! : { $and: filterParts };
-  const rows = await Issue.find(filter).limit(200).lean();
+  // Sort in the database before limiting so truncation is deterministic (most recently
+  // updated issues win) instead of whichever documents MongoDB happens to return first.
+  const rows = await Issue.find(filter)
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(ORG_ISSUE_LIST_LIMIT)
+    .lean();
+  const truncated = rows.length === ORG_ISSUE_LIST_LIMIT;
+  const total = truncated ? await Issue.countDocuments(filter) : rows.length;
   const projects = await Project.find({
     _id: { $in: rows.map((r) => r.projectId) },
   })
@@ -757,7 +822,7 @@ export async function listAllIssues(
     if (!p) continue;
     out.push(await toListDto(row as unknown as IssueDoc, p, userMap));
   }
-  return out;
+  return { issues: out, total, truncated: truncated && total > out.length };
 }
 
 export async function listProjectIssues(
@@ -860,10 +925,13 @@ export async function patchIssue(
   );
   const issue = await Issue.findOne({ organizationId, displayId });
   if (!issue) throw new HttpError(404, "Issue not found");
-  if (typeof body.title === "string") issue.title = body.title.trim();
+  if (typeof body.title === "string") issue.title = readTitlePatch(body.title);
   if (typeof body.description === "string")
-    issue.description = body.description;
-  if (typeof body.status === "string") issue.status = body.status;
+    issue.description = readDescriptionPatch(body.description);
+  if (typeof body.status === "string") {
+    const proj = await Project.findById(issue.projectId).select("boardColumns").lean();
+    issue.status = await resolveKnownIssueStatus(organizationId, proj?.boardColumns, body.status);
+  }
   if (typeof body.priority === "string")
     issue.priority = resolveCreatePriority(body.priority);
   if (typeof body.unread === "boolean") issue.unread = body.unread;
@@ -893,6 +961,7 @@ export async function patchIssue(
         organizationId,
         userId,
         parentDisplayId: displayId,
+        existingLinkedIds: existingSubtaskLinks(issue),
       }),
     );
   }
@@ -914,10 +983,11 @@ export async function patchIssueUnderProject(
     displayId,
   });
   if (!issue) throw new HttpError(404, "Issue not found");
-  if (typeof body.title === "string") issue.title = body.title.trim();
+  if (typeof body.title === "string") issue.title = readTitlePatch(body.title);
   if (typeof body.description === "string")
-    issue.description = body.description;
-  if (typeof body.status === "string") issue.status = body.status;
+    issue.description = readDescriptionPatch(body.description);
+  if (typeof body.status === "string")
+    issue.status = await resolveKnownIssueStatus(organizationId, p.boardColumns, body.status);
   if (typeof body.priority === "string")
     issue.priority = resolveCreatePriority(body.priority);
   if (typeof body.unread === "boolean") issue.unread = body.unread;
@@ -947,6 +1017,7 @@ export async function patchIssueUnderProject(
         organizationId,
         userId,
         parentDisplayId: displayId,
+        existingLinkedIds: existingSubtaskLinks(issue),
       }),
     );
   }
@@ -1016,6 +1087,13 @@ export async function createIssueUnderProject(
   const p = await assertProjectMember(organizationId, userId, slug);
   const title = input.title.trim();
   if (!title) throw new HttpError(400, "Invalid input");
+  assertMaxLength(title, LIMITS.issueTitle, "Title");
+  const description = String(input.description ?? "").trim();
+  assertMaxLength(description, LIMITS.issueDescription, "Description");
+  const status =
+    input.status === undefined
+      ? "todo"
+      : await resolveKnownIssueStatus(organizationId, p.boardColumns, input.status);
   const number = await nextIssueNumber(p._id);
   const displayId = `${p.keyPrefix}-${number}`;
   const uid = new mongoose.Types.ObjectId(userId);
@@ -1039,8 +1117,8 @@ export async function createIssueUnderProject(
     displayId,
     number,
     title,
-    description: String(input.description ?? "").trim(),
-    status: input.status ?? "todo",
+    description,
+    status,
     priority: resolveCreatePriority(input.priority),
     assigneeId,
     label: resolveCreateLabel(input.label),
@@ -1074,6 +1152,7 @@ export async function createIssueGlobal(
 ): Promise<IssueListDto> {
   const title = input.title.trim();
   if (!title) throw new HttpError(400, "Invalid input");
+  assertMaxLength(title, LIMITS.issueTitle, "Title");
   let p;
   if (input.projectSlug) {
     p = await assertProjectMember(organizationId, userId, input.projectSlug);
@@ -1110,9 +1189,49 @@ export async function deleteIssue(
     throw new HttpError(400, "Remove all subtasks before deleting this issue");
   }
   const oid = (issue as unknown as { _id: mongoose.Types.ObjectId })._id;
+  // Collect stored files of the issue and its comments before the documents go away.
+  const issueAttachmentUrls = (
+    ((issue as unknown as { attachments?: { url?: string }[] }).attachments ?? [])
+  ).map((a) => a.url ?? "");
+  const comments = await Comment.find({ issueId: oid, organizationId }).select("attachments").lean();
+  const commentAttachmentUrls = comments.flatMap((c) =>
+    ((c as { attachments?: { url?: string }[] }).attachments ?? []).map((a) => a.url ?? ""),
+  );
   await Comment.deleteMany({ issueId: oid, organizationId });
   const del = await Issue.deleteOne({ _id: oid, organizationId });
   if (del.deletedCount === 0) throw new HttpError(404, "Issue not found");
+  // Other issues' subtasks that linked to this issue become plain (unlinked) subtasks.
+  await Issue.updateMany(
+    { organizationId, "subtasks.linkedIssueId": displayId },
+    { $set: { "subtasks.$[s].linkedIssueId": null } },
+    { arrayFilters: [{ "s.linkedIssueId": displayId }] },
+  );
+  await deleteUnreferencedAttachmentFiles(organizationId, [
+    ...issueAttachmentUrls,
+    ...commentAttachmentUrls,
+  ]);
+}
+
+/** Best-effort removal of GridFS files that belong to the org and are no longer referenced. */
+async function deleteUnreferencedAttachmentFiles(
+  organizationId: mongoose.Types.ObjectId,
+  urls: string[],
+): Promise<void> {
+  const ids = new Map<string, mongoose.Types.ObjectId>();
+  for (const url of urls) {
+    const gridId = url ? attachmentGridFsIdFromTrustedUrl(url) : null;
+    if (gridId) ids.set(gridId.toHexString(), gridId);
+  }
+  for (const gridId of ids.values()) {
+    try {
+      const meta = await getAttachmentFileMeta(gridId);
+      if (!meta?.organizationId.equals(organizationId)) continue;
+      if (await isAttachmentFileStillReferenced(organizationId, gridId)) continue;
+      await deleteAttachmentFromGridFs(gridId);
+    } catch (e) {
+      console.error("Attachment cleanup after issue delete failed", e);
+    }
+  }
 }
 
 export async function addComment(
@@ -1123,6 +1242,7 @@ export async function addComment(
   attachmentsRaw?: unknown,
 ): Promise<IssueDetailDto> {
   const content = text.trim();
+  assertMaxLength(content, LIMITS.comment, "Comment");
   const attachments = normalizeAttachmentsInput(attachmentsRaw);
   if (!content && attachments.length === 0)
     throw new HttpError(400, "Invalid input");
@@ -1169,6 +1289,7 @@ export async function updateComment(
     throw new HttpError(403, "You can only edit your own comments");
   }
   const content = text.trim();
+  assertMaxLength(content, LIMITS.comment, "Comment");
   const attCount = (comment.attachments ?? []).length;
   if (!content && attCount === 0) {
     throw new HttpError(400, "Invalid input");

@@ -44,9 +44,8 @@ export async function transcribeAudioBuffer(input: {
     const e = error as { status?: number; message?: string };
     if (e?.status === 401) throw new HttpError(502, "OpenAI authentication failed. Check OPENAI_API_KEY.");
     if (e?.status === 429) throw new HttpError(502, "OpenAI rate limit or quota exceeded.");
-    if (typeof e?.message === "string" && e.message.trim()) {
-      throw new HttpError(502, `Audio transcription failed: ${e.message.slice(0, 200)}`);
-    }
+    // Keep upstream details in server logs only; clients get a generic message.
+    console.error("OpenAI audio transcription failed", e?.status, e?.message);
     throw new HttpError(502, "Failed to transcribe recording");
   }
 }

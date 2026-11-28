@@ -1,4 +1,4 @@
-import type { ApiResponse } from "@/lib/api-response";
+import { fail, type ApiResponse } from "@/lib/api-response";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -15,6 +15,33 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 
 function noteStatus(status: number): void {
   if (status === 401) unauthorizedHandler?.();
+}
+
+const NETWORK_ERROR_MESSAGE = "Network error — check your connection";
+
+/** `fetch` that never rejects: network failures resolve to `null`. */
+async function safeFetch(url: string, init: RequestInit): Promise<Response | null> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse an API envelope, tolerating non-JSON bodies (HTML error pages, empty bodies) by
+ * returning a failed `ApiResponse` instead of throwing.
+ */
+async function readPayload<T>(res: Response): Promise<ApiResponse<T>> {
+  try {
+    const payload = (await res.json()) as unknown;
+    if (payload && typeof payload === "object" && "success" in payload) {
+      return payload as ApiResponse<T>;
+    }
+  } catch {
+    // fall through
+  }
+  return fail(`Unexpected server response (HTTP ${res.status})`);
 }
 
 function apiBaseUrl(): string {
@@ -51,7 +78,7 @@ export async function apiJson<T>(
 ): Promise<ApiResponse<T>> {
   const { body, headers, orgId, ...rest } = init ?? {};
   const orgHeader = organizationHeader(orgId);
-  const res = await fetch(resolveUrl(path), {
+  const res = await safeFetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
     headers: {
@@ -61,9 +88,9 @@ export async function apiJson<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (!res) return fail(NETWORK_ERROR_MESSAGE);
   noteStatus(res.status);
-  const payload = (await res.json()) as ApiResponse<T>;
-  return payload;
+  return readPayload<T>(res);
 }
 
 /** Same as `apiJson` but includes HTTP status for callers that must distinguish 401 vs 404. */
@@ -73,7 +100,7 @@ export async function apiJsonWithStatus<T>(
 ): Promise<{ status: number; payload: ApiResponse<T> }> {
   const { body, headers, orgId, ...rest } = init ?? {};
   const orgHeader = organizationHeader(orgId);
-  const res = await fetch(resolveUrl(path), {
+  const res = await safeFetch(resolveUrl(path), {
     ...rest,
     credentials: "include",
     headers: {
@@ -83,8 +110,9 @@ export async function apiJsonWithStatus<T>(
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (!res) return { status: 0, payload: fail(NETWORK_ERROR_MESSAGE) };
   noteStatus(res.status);
-  const payload = (await res.json()) as ApiResponse<T>;
+  const payload = await readPayload<T>(res);
   return { status: res.status, payload };
 }
 
@@ -93,7 +121,7 @@ export type UploadResult = { url: string; filename: string; size: number; mimeTy
 /** Multipart upload to POST /api/uploads (cookie + org header). */
 export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResult>> {
   const orgHeader = organizationHeader();
-  const res = await fetch(resolveUrl("/api/uploads"), {
+  const res = await safeFetch(resolveUrl("/api/uploads"), {
     method: "POST",
     credentials: "include",
     headers: orgHeader,
@@ -103,21 +131,23 @@ export async function apiUploadFile(file: File): Promise<ApiResponse<UploadResul
       return fd;
     })(),
   });
+  if (!res) return fail(NETWORK_ERROR_MESSAGE);
   noteStatus(res.status);
-  return (await res.json()) as ApiResponse<UploadResult>;
+  return readPayload<UploadResult>(res);
 }
 
 /** Multipart upload helper for custom endpoint paths. */
 export async function apiUploadForm<T>(path: string, formData: FormData): Promise<ApiResponse<T>> {
   const orgHeader = organizationHeader();
-  const res = await fetch(resolveUrl(path), {
+  const res = await safeFetch(resolveUrl(path), {
     method: "POST",
     credentials: "include",
     headers: orgHeader,
     body: formData,
   });
+  if (!res) return fail(NETWORK_ERROR_MESSAGE);
   noteStatus(res.status);
-  return (await res.json()) as ApiResponse<T>;
+  return readPayload<T>(res);
 }
 
 export async function apiUploadRecording<T>(file: File, durationMs?: number): Promise<ApiResponse<T>> {

@@ -3,6 +3,9 @@ import multer from "multer";
 import * as recordingController from "../controllers/transcriptionRecording.controller";
 import { requireAuth } from "../middleware/auth";
 import { requireOrganization } from "../middleware/organization";
+import { byUser, rateLimit } from "../middleware/rateLimit";
+
+const HOUR = 60 * 60_000;
 import { fail } from "../types/api";
 
 const recordingUpload = multer({
@@ -41,5 +44,14 @@ transcriptionRecordingRoutes.post("/", (req, res, next) => {
 }, (req, res) => void recordingController.postRecording(req, res));
 
 transcriptionRecordingRoutes.get("/:recordingId", (req, res) => void recordingController.getOne(req, res));
-transcriptionRecordingRoutes.post("/:recordingId/transcribe", (req, res) => void recordingController.postTranscribe(req, res));
-transcriptionRecordingRoutes.post("/:recordingId/candidates", (req, res) => void recordingController.postCandidates(req, res));
+/** Each call spends OpenAI credits: cap per user. */
+transcriptionRecordingRoutes.post(
+  "/:recordingId/transcribe",
+  rateLimit("ai-transcribe", 30, { windowMs: HOUR, keyBy: byUser }),
+  (req, res) => void recordingController.postTranscribe(req, res),
+);
+transcriptionRecordingRoutes.post(
+  "/:recordingId/candidates",
+  rateLimit("ai-candidates", 30, { windowMs: HOUR, keyBy: byUser }),
+  (req, res) => void recordingController.postCandidates(req, res),
+);

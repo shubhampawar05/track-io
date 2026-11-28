@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { createHash } from "crypto";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { HttpError } from "../middleware/errorHandler";
@@ -16,8 +17,15 @@ const STATE_PURPOSE = "github_oauth";
 
 type StatePayload = {
   organizationId: string;
+  /** User who started the flow; the callback must be completed by the same user (spec §8). */
+  userId: string;
   purpose: typeof STATE_PURPOSE;
 };
+
+/** OAuth state is signed with its own key (derived), never with the raw session secret. */
+function stateSigningKey(): Buffer {
+  return createHash("sha256").update(`trackio:github-oauth-state:${env.JWT_SECRET}`, "utf8").digest();
+}
 
 function assertGithubConfigured(): void {
   if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET || !env.GITHUB_OAUTH_CALLBACK_URL) {
@@ -51,11 +59,11 @@ export async function getGithubStatus(organizationId: mongoose.Types.ObjectId): 
   return { connected: true, githubLogin: doc.githubLogin, webhookConfigured, webhookUrl };
 }
 
-function buildGithubAuthorizeUrl(organizationId: mongoose.Types.ObjectId): string {
+function buildGithubAuthorizeUrl(organizationId: mongoose.Types.ObjectId, userId: string): string {
   const orgStr = organizationId.toString();
   const state = jwt.sign(
-    { organizationId: orgStr, purpose: STATE_PURPOSE } satisfies StatePayload,
-    env.JWT_SECRET,
+    { organizationId: orgStr, userId, purpose: STATE_PURPOSE } satisfies StatePayload,
+    stateSigningKey(),
     { algorithm: "HS256", expiresIn: "10m" },
   );
   const u = new URL(GITHUB_AUTH_URL);
@@ -72,17 +80,21 @@ export async function getGithubOauthUrl(
 ): Promise<{ url: string }> {
   assertGithubConfigured();
   await requireOwnerOrAdmin(organizationId, userId);
-  return { url: buildGithubAuthorizeUrl(organizationId) };
+  return { url: buildGithubAuthorizeUrl(organizationId, userId) };
 }
 
-function parseState(state: string): mongoose.Types.ObjectId {
+function parseState(state: string, userId: string): mongoose.Types.ObjectId {
   let decoded: jwt.JwtPayload;
   try {
-    decoded = jwt.verify(state, env.JWT_SECRET, { algorithms: ["HS256"] }) as jwt.JwtPayload;
+    decoded = jwt.verify(state, stateSigningKey(), { algorithms: ["HS256"] }) as jwt.JwtPayload;
   } catch {
     throw new HttpError(400, "Invalid OAuth state");
   }
   if (decoded.purpose !== STATE_PURPOSE || typeof decoded.organizationId !== "string") {
+    throw new HttpError(400, "Invalid OAuth state");
+  }
+  // Blocks login-CSRF style attacks: a state minted for another user cannot be completed here.
+  if (decoded.userId !== userId) {
     throw new HttpError(400, "Invalid OAuth state");
   }
   if (!mongoose.Types.ObjectId.isValid(decoded.organizationId)) {
@@ -111,7 +123,7 @@ export async function completeGithubOAuth(
   assertGithubConfigured();
   if (!code || !state) throw new HttpError(400, "Invalid OAuth callback");
 
-  const organizationId = parseState(state);
+  const organizationId = parseState(state, userId);
   await requireOwnerOrAdmin(organizationId, userId);
 
   const tokenRes = await fetch(GITHUB_TOKEN_URL, {

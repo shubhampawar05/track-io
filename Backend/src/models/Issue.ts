@@ -67,6 +67,8 @@ issueSchema.index({ projectId: 1, number: 1 }, { unique: true });
 issueSchema.index({ organizationId: 1, projectId: 1 });
 issueSchema.index({ assigneeId: 1 });
 issueSchema.index({ organizationId: 1, dueDate: 1 });
+/** Org-wide issue list sorts by most recently updated before limiting. */
+issueSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export type IssueDoc = InferSchemaType<typeof issueSchema> & { _id: mongoose.Types.ObjectId };
 export const Issue = mongoose.model("Issue", issueSchema);

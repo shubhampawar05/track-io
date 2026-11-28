@@ -8,6 +8,7 @@ import { Project } from "../models/Project";
 import { User } from "../models/User";
 import { buildOrganizationInviteMail } from "./emailTemplates";
 import { sendMail } from "./mail.service";
+import { isValidEmail } from "../utils/inputLimits";
 import { hashToken, randomUrlToken } from "../utils/tokenCrypto";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -43,7 +44,7 @@ export async function createAndSendInvite(input: {
     throw new HttpError(403, "Only owners and admins can invite members");
   }
   const email = input.emailRaw.toLowerCase().trim();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email || !isValidEmail(email)) {
     throw new HttpError(400, "Invalid email address");
   }
   const org = await Organization.findById(input.organizationId).lean();

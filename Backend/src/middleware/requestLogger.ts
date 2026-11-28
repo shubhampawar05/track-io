@@ -25,6 +25,21 @@ function statusColor(status: number): string {
 
 const RESET = "\x1b[0m";
 
+/** Query parameters that carry bearer-equivalent secrets (invite/reset tokens, OAuth code/state). */
+const SENSITIVE_QUERY_KEYS = new Set(["token", "code", "state"]);
+
+/** originalUrl with secret query values replaced, so logs never hold usable tokens. */
+function redactedUrl(req: Request): string {
+  const raw = req.originalUrl;
+  const q = raw.indexOf("?");
+  if (q < 0) return raw;
+  const params = new URLSearchParams(raw.slice(q + 1));
+  for (const key of [...params.keys()]) {
+    if (SENSITIVE_QUERY_KEYS.has(key.toLowerCase())) params.set(key, "[redacted]");
+  }
+  return `${raw.slice(0, q)}?${params.toString()}`;
+}
+
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const startedAt = process.hrtime.bigint();
 
@@ -34,7 +49,7 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
     const userPart = req.userId ? ` user=${req.userId}` : "";
     const orgPart = req.organizationId ? ` org=${req.organizationId.toString()}` : "";
     const line =
-      `[${timestampNow()}] ${req.method} ${req.originalUrl} ` +
+      `[${timestampNow()}] ${req.method} ${redactedUrl(req)} ` +
       `${statusColor(status)}${status}${RESET} ${elapsedMs.toFixed(1)}ms${userPart}${orgPart}`;
 
     // eslint-disable-next-line no-console

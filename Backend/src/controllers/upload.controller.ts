@@ -9,6 +9,30 @@ import {
 } from "../services/attachmentStorage.service";
 import { fail, ok } from "../types/api";
 
+/** File signatures for the allowed upload types; the client-declared MIME type alone is not trusted. */
+function contentMatchesDeclaredType(buf: Buffer, mimeType: string): boolean {
+  const starts = (...bytes: number[]) => bytes.every((b, i) => buf[i] === b);
+  switch (mimeType.toLowerCase()) {
+    case "image/jpeg":
+      return starts(0xff, 0xd8, 0xff);
+    case "image/png":
+      return starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+    case "image/gif":
+      return buf.subarray(0, 4).toString("latin1") === "GIF8";
+    case "image/webp":
+      return buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP";
+    case "application/pdf":
+      return buf.subarray(0, 5).toString("latin1") === "%PDF-";
+    default:
+      return false;
+  }
+}
+
+/** RFC 6266 quoted-string: escape backslash and double quote in the ASCII fallback name. */
+function quotedAsciiFilename(filename: string): string {
+  return filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+}
+
 export async function postUpload(req: Request, res: Response) {
   try {
     const f = req.file;
@@ -18,6 +42,10 @@ export async function postUpload(req: Request, res: Response) {
     }
     if (!req.organizationId || !req.userId) {
       res.status(401).json(fail("Unauthorized"));
+      return;
+    }
+    if (!f.buffer || !contentMatchesDeclaredType(f.buffer, f.mimetype)) {
+      res.status(400).json(fail("File content does not match its type"));
       return;
     }
     const gridId = await saveAttachmentBufferToGridFs({
@@ -69,11 +97,16 @@ export async function getUploadFile(req: Request, res: Response) {
       return;
     }
     const { filename, contentType } = fileMeta;
-    const asciiFallback = filename.replace(/[^\x20-\x7E]/g, "_");
+    const asciiFallback = quotedAsciiFilename(filename);
+    // Images render inline (used by <img> tags); anything else (PDF) downloads, so it never
+    // runs as a document on the API's origin.
+    const disposition = contentType.startsWith("image/") ? "inline" : "attachment";
     res.setHeader("Content-Type", contentType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename*=UTF-8''${encodeURIComponent(filename)}; filename="${asciiFallback}"`,
+      `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}; filename="${asciiFallback}"`,
     );
     const stream = openAttachmentDownloadStream(fileId);
     stream.on("error", () => {

@@ -7,6 +7,7 @@ import { User } from "../models/User";
 import type { BoardColumnDto } from "../utils/boardColumns";
 import { effectiveProjectBoardColumns } from "../utils/boardColumns";
 import { normalizeGithubRepoFullNameInput } from "../utils/githubUrlParse";
+import { LIMITS, assertMaxLength } from "../utils/inputLimits";
 import { keyPrefixFromName, slugifyName } from "../utils/slug";
 
 const COLORS = ["bg-indigo-500", "bg-purple-500", "bg-blue-500", "bg-emerald-500", "bg-rose-500"];
@@ -101,6 +102,7 @@ function retryJitter(): Promise<void> {
 export async function createProject(organizationId: mongoose.Types.ObjectId, userId: string, nameRaw: string): Promise<ProjectCardDto> {
   const name = nameRaw.trim();
   if (!name) throw new HttpError(400, "Invalid input");
+  assertMaxLength(name, LIMITS.name, "Project name");
   const uid = new mongoose.Types.ObjectId(userId);
   const memberships = await Membership.find({ organizationId }).select("userId").lean();
   let memberIds = memberships.map((m) => m.userId as mongoose.Types.ObjectId);

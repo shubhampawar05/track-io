@@ -15,23 +15,33 @@ export async function createRecording(
   file: Express.Multer.File,
   durationMs?: number,
 ) {
+  // Normalise metadata to the schema limits *before* storing audio, so a long client filename
+  // cannot fail validation after the GridFS write and orphan the file.
+  const filename = (file.originalname || "recording.webm").trim().slice(0, 256) || "recording.webm";
+  const mimeType = String(file.mimetype || "application/octet-stream").trim().slice(0, 128);
   const gridFsFileId = await saveAudioBufferToGridFs({
     file,
     organizationId: organizationId.toString(),
     userId,
   });
-  const created = await TranscriptionRecording.create({
-    organizationId,
-    userId: new mongoose.Types.ObjectId(userId),
-    gridFsFileId,
-    filename: file.originalname || "recording.webm",
-    mimeType: file.mimetype,
-    size: file.size,
-    durationMs: typeof durationMs === "number" && durationMs > 0 ? durationMs : null,
-    status: "uploaded",
-    transcriptText: "",
-    errorMessage: "",
-  });
+  let created;
+  try {
+    created = await TranscriptionRecording.create({
+      organizationId,
+      userId: new mongoose.Types.ObjectId(userId),
+      gridFsFileId,
+      filename,
+      mimeType,
+      size: file.size,
+      durationMs: typeof durationMs === "number" && durationMs > 0 ? durationMs : null,
+      status: "uploaded",
+      transcriptText: "",
+      errorMessage: "",
+    });
+  } catch (err) {
+    await deleteAudioFromGridFs(gridFsFileId).catch(() => undefined);
+    throw err;
+  }
   return {
     id: created._id.toString(),
     status: created.status,
@@ -76,6 +86,9 @@ export async function getRecording(
   };
 }
 
+/** A transcription still "transcribing" after this long is treated as abandoned (e.g. crash). */
+const STALE_TRANSCRIBING_MS = 10 * 60_000;
+
 export async function transcribeRecording(
   organizationId: mongoose.Types.ObjectId,
   userId: string,
@@ -93,9 +106,22 @@ export async function transcribeRecording(
     throw new HttpError(400, "No audio file to transcribe");
   }
 
-  row.status = "transcribing";
+  // Claim the job atomically so two concurrent requests cannot both pay for transcription
+  // (a "transcribing" row older than the stale window is assumed abandoned and may be retried).
+  const claimed = await TranscriptionRecording.findOneAndUpdate(
+    {
+      _id: row._id,
+      $or: [
+        { status: { $in: ["uploaded", "failed"] } },
+        { status: "transcribing", updatedAt: { $lt: new Date(Date.now() - STALE_TRANSCRIBING_MS) } },
+      ],
+    },
+    { $set: { status: "transcribing", errorMessage: "" } },
+    { new: true },
+  );
+  if (!claimed) throw new HttpError(409, "Transcription is already in progress");
+  row.status = claimed.status;
   row.errorMessage = "";
-  await row.save();
   try {
     const fileId = row.gridFsFileId as mongoose.Types.ObjectId;
     const audioBuffer = await readAudioBufferFromGridFs(fileId);

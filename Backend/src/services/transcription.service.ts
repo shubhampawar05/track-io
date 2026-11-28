@@ -99,23 +99,29 @@ export async function createIssuesFromCandidates(
   await assertProjectMember(organizationId, userId, projectSlug);
   const created: Awaited<ReturnType<typeof issueService.createIssueUnderProject>>[] = [];
   const skipped: { reason: string; item: { title: string } }[] = [];
-  for (const raw of input.items) {
+  for (const raw of input.items as unknown[]) {
+    const rawTitle =
+      raw && typeof raw === "object" ? String((raw as { title?: unknown }).title ?? "").trim() : "";
+    if (!raw || typeof raw !== "object") {
+      skipped.push({ reason: "Invalid item", item: { title: rawTitle } });
+      continue;
+    }
     try {
-      const parsed = parseCreateItem(raw);
+      const parsed = parseCreateItem(raw as Parameters<typeof parseCreateItem>[0]);
+      // Due date goes in with the create, so an issue is never created and then reported
+      // as "skipped" because a follow-up patch failed.
       const issue = await issueService.createIssueUnderProject(organizationId, userId, projectSlug, {
         title: parsed.title,
         description: parsed.description,
         priority: parsed.priority,
         status: "todo",
         assigneeId: parsed.assigneeId,
+        dueDate: parsed.dueDate ?? null,
       });
-      if (parsed.dueDate) {
-        await issueService.patchIssue(organizationId, userId, issue.id, { dueDate: parsed.dueDate });
-      }
       created.push(issue);
     } catch (error) {
       if (error instanceof HttpError && error.status >= 400 && error.status < 500) {
-        skipped.push({ reason: error.message, item: { title: String(raw.title ?? "").trim() } });
+        skipped.push({ reason: error.message, item: { title: rawTitle } });
         continue;
       }
       throw error;

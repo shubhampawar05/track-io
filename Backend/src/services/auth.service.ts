@@ -4,6 +4,7 @@ import { HttpError } from "../middleware/errorHandler";
 import { Membership } from "../models/Membership";
 import { Organization } from "../models/Organization";
 import { User } from "../models/User";
+import { LIMITS, assertMaxLength, isValidEmail } from "../utils/inputLimits";
 import { initialsFromName } from "../utils/initials";
 
 export type OrganizationSummary = { id: string; name: string; role: string };
@@ -79,6 +80,9 @@ export async function registerService(input: {
   const name = input.name.trim();
   const password = input.password;
   if (!email || !password || !name) throw new HttpError(400, "Invalid input");
+  if (!isValidEmail(email)) throw new HttpError(400, "Invalid email address");
+  assertMaxLength(name, LIMITS.name, "Name");
+  if (password.length > 200) throw new HttpError(400, "Password is too long");
   if (password.length < 8) throw new HttpError(400, "Password must be at least 8 characters");
   const exists = await User.findOne({ email }).lean();
   if (exists) throw new HttpError(409, "Email already registered");
@@ -109,6 +113,7 @@ export async function patchProfileService(
   if (typeof input.name === "string") {
     const name = input.name.trim();
     if (!name) throw new HttpError(400, "Invalid input");
+    assertMaxLength(name, LIMITS.name, "Name");
     user.name = name;
     user.initials = initialsFromName(name);
     await user.save();
