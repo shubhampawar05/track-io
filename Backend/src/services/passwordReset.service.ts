@@ -22,17 +22,17 @@ export async function requestPasswordReset(emailRaw: string): Promise<{ message:
   await user.save();
   const link = `${env.FRONTEND_ORIGIN.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
   const mail = buildPasswordResetMail({ recipientName: user.name ?? "", resetUrl: link });
-  try {
-    await sendMail({
-      to: user.email,
-      subject: mail.subject,
-      text: mail.text,
-      html: mail.html,
-    });
-  } catch (err) {
+  // Send in the background: waiting on SMTP only for existing accounts would let response
+  // time reveal which emails are registered.
+  void sendMail({
+    to: user.email,
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+  }).catch((err: unknown) => {
     // eslint-disable-next-line no-console
     console.error("[mail] password reset send failed", err);
-  }
+  });
   return { message: GENERIC_FORGOT_MSG };
 }
 

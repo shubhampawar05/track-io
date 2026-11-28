@@ -9,6 +9,7 @@ import type { IssueDetail } from "@/types/issue";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
 import { IssueDetailSkeleton } from "@/components/issues/IssueDetailSkeleton";
 import { resolveIssueCloseHref } from "@/lib/issue-detail-from";
+import { safeDecodeURIComponent } from "@/lib/utils";
 
 async function loadIssueDetail(id: string, orgId: string | null): Promise<IssueDetail> {
   const path = `/api/issues/${encodeURIComponent(id)}`;
@@ -50,7 +51,7 @@ function IssueDetailPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const closeHref = resolveIssueCloseHref(searchParams);
-  const id = typeof params.id === "string" ? decodeURIComponent(params.id) : "";
+  const id = typeof params.id === "string" ? safeDecodeURIComponent(params.id) : "";
   const organizationId = useOrganizationStore((s) => s.organizationId);
   const queryClient = useQueryClient();
 

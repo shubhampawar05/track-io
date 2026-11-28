@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { env } from "../config/env";
 import { HttpError } from "../middleware/errorHandler";
+import { LIMITS } from "../utils/inputLimits";
 import type { ExtractCandidate } from "./transcription.service";
 
 type RawCandidate = {
@@ -127,7 +128,8 @@ export async function extractCandidatesWithLlm(transcriptText: string): Promise<
         { role: "system", content: prompt },
         {
           role: "user",
-          content: `Transcript:\n${text.slice(0, 20000)}`,
+          // Text uploads are rejected above this limit; long audio transcripts are cut here.
+          content: `Transcript:\n${text.slice(0, LIMITS.transcript)}`,
         },
       ],
     });

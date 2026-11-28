@@ -9,6 +9,7 @@ import { User } from "../models/User";
 import { buildOrganizationInviteMail } from "./emailTemplates";
 import { sendMail } from "./mail.service";
 import { isValidEmail } from "../utils/inputLimits";
+import { isDuplicateKeyError } from "../utils/mongoErrors";
 import { hashToken, randomUrlToken } from "../utils/tokenCrypto";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -165,11 +166,16 @@ export async function acceptInviteForUser(
     await addOrgMemberToAllProjects(invite.organizationId, uid);
     return { organizationId: invite.organizationId.toString() };
   }
-  await Membership.create({
-    userId: uid,
-    organizationId: invite.organizationId,
-    role: invite.role === "admin" ? "admin" : "member",
-  });
+  try {
+    await Membership.create({
+      userId: uid,
+      organizationId: invite.organizationId,
+      role: invite.role === "admin" ? "admin" : "member",
+    });
+  } catch (err) {
+    // Double-submit: a concurrent accept already created the membership — same outcome.
+    if (!isDuplicateKeyError(err)) throw err;
+  }
   invite.status = "accepted";
   await invite.save();
   await addOrgMemberToAllProjects(invite.organizationId, uid);

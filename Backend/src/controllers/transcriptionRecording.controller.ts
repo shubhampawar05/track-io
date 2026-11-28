@@ -26,7 +26,7 @@ export async function postRecording(req: Request, res: Response) {
 
 export async function getOne(req: Request, res: Response) {
   try {
-    const recordingId = decodeURIComponent(String(req.params.recordingId));
+    const recordingId = String(req.params.recordingId);
     const data = await recordingService.getRecording(req.organizationId!, req.userId!, recordingId);
     res.json(ok(data));
   } catch (e) {
@@ -40,7 +40,7 @@ export async function getOne(req: Request, res: Response) {
 
 export async function postTranscribe(req: Request, res: Response) {
   try {
-    const recordingId = decodeURIComponent(String(req.params.recordingId));
+    const recordingId = String(req.params.recordingId);
     const data = await recordingService.transcribeRecording(req.organizationId!, req.userId!, recordingId);
     res.json(ok(data));
   } catch (e) {
@@ -54,7 +54,7 @@ export async function postTranscribe(req: Request, res: Response) {
 
 export async function postCandidates(req: Request, res: Response) {
   try {
-    const recordingId = decodeURIComponent(String(req.params.recordingId));
+    const recordingId = String(req.params.recordingId);
     const data = await recordingService.extractRecordingCandidates(req.organizationId!, req.userId!, recordingId);
     res.json(ok(data));
   } catch (e) {

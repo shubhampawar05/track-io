@@ -35,7 +35,8 @@ import { listRowAssigneeTooltip } from "@/utils/issuePriority";
 
 export type ListPipelineTab = "all" | "active" | "backlog" | "priority";
 
-const TERMINAL_OR_QUEUE_STATUSES = new Set(["backlog", "done", "canceled"]);
+/** Per the frontend spec, the Active tab shows `todo` + `in-progress` only. */
+const ACTIVE_STATUSES = new Set(["todo", "in-progress"]);
 
 function priorityRank(p: string): number {
   const order: Record<string, number> = {
@@ -50,7 +51,7 @@ function priorityRank(p: string): number {
 function filterByTab(issues: Issue[], tab: ListPipelineTab): Issue[] {
   if (tab === "all") return issues;
   if (tab === "active") {
-    return issues.filter((i) => !TERMINAL_OR_QUEUE_STATUSES.has(i.status));
+    return issues.filter((i) => ACTIVE_STATUSES.has(i.status));
   }
   if (tab === "backlog") {
     return issues.filter((i) => i.status === "backlog");
@@ -83,7 +84,7 @@ function emptyMessage(tab: ListPipelineTab): string {
     case "all":
       return "No issues yet.";
     case "active":
-      return "No active issues (everything is backlog, done, or cancelled).";
+      return "No active issues (nothing is in Todo or In Progress).";
     case "backlog":
       return "No backlog issues yet.";
     case "priority":
@@ -100,6 +101,7 @@ export function ListView({
   onRetry,
   projectSlug,
   embedded,
+  hideFilters = false,
   issueNavFrom = "list",
   issueNavProjectView = "list",
   appliedPipelineFilters,
@@ -112,6 +114,8 @@ export function ListView({
   /** When set, empty-state “New issue” opens the modal scoped to this project. */
   projectSlug?: string | null;
   embedded?: boolean;
+  /** Hide the Filters button when pipeline filters don't apply to this list (e.g. My Issues). */
+  hideFilters?: boolean;
   issueNavFrom?: "board" | "list" | "project";
   issueNavProjectView?: "list" | "board";
   appliedPipelineFilters?: PipelineFilterState;
@@ -150,14 +154,16 @@ export function ListView({
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold">Issue Pipeline</h2>
-          <button
-            type="button"
-            onClick={() => setFilterOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-(--border) rounded-md text-xs text-linear-text-muted hover:text-(--text) transition-all duration-200 mr-[6px]"
-          >
-            <ListFilter className="w-3.5 h-3.5" />
-            Filters
-          </button>
+          {hideFilters ? null : (
+            <button
+              type="button"
+              onClick={() => setFilterOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-(--border) rounded-md text-xs text-linear-text-muted hover:text-(--text) transition-all duration-200 mr-[6px]"
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              Filters
+            </button>
+          )}
         </div>
         {!embedded && appliedPipelineFilters ? (
           <IssuePipelineFilterChipsRow applied={appliedPipelineFilters} />

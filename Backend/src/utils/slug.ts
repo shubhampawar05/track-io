@@ -1,10 +1,19 @@
+/**
+ * URL slug from a display name. Unicode-aware: accents are folded ("Café" -> "cafe") and letters
+ * from any script are kept ("Проект" -> "проект"), so non-Latin names no longer all collapse to
+ * "project". Clients always URL-encode slugs.
+ */
 export function slugifyName(name: string): string {
   const base = name
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
     .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
   return base.length > 0 ? base : "project";
 }
 

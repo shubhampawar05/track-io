@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ToastState, TranscriptionCandidate } from "@/types/issue";
+import type { Status, ToastState, TranscriptionCandidate } from "@/types/issue";
 
 export type ExtractTasksModalTab = "paste" | "record";
 
@@ -13,20 +13,24 @@ interface UIState {
   toast: ToastState | null;
   /** When creating an issue from a project workspace, scope to this project slug */
   newIssueProjectSlug: string | null;
+  /** Pre-selected status for the new issue (e.g. the board column it was opened from). */
+  newIssueInitialStatus: Status | null;
   transcriptionSeedCandidates: TranscriptionCandidate[] | null;
-  setModalOpen: (v: boolean) => void;
   setProjectModalOpen: (v: boolean) => void;
   setExtractTasksModalOpen: (open: boolean, tab?: ExtractTasksModalTab) => void;
   openTranscriptionModalWithCandidates: (candidates: TranscriptionCandidate[]) => void;
-  clearTranscriptionSeedCandidates: () => void;
   setInviteModalOpen: (v: boolean) => void;
   setFilterOpen: (v: boolean) => void;
-  setNewIssueProjectSlug: (slug: string | null) => void;
-  openNewIssueModal: (projectSlug?: string | null) => void;
+  openNewIssueModal: (
+    projectSlug?: string | null,
+    initialStatus?: Status | null,
+  ) => void;
   closeNewIssueModal: () => void;
   showToast: (message: string, type?: ToastState["type"]) => void;
   clearToast: () => void;
 }
+
+let toastSeq = 0;
 
 export const useUIStore = create<UIState>((set) => ({
   isModalOpen: false,
@@ -37,26 +41,35 @@ export const useUIStore = create<UIState>((set) => ({
   isFilterOpen: false,
   toast: null,
   newIssueProjectSlug: null,
+  newIssueInitialStatus: null,
   transcriptionSeedCandidates: null,
-  setModalOpen: (v) => set({ isModalOpen: v }),
   setProjectModalOpen: (v) => set({ isProjectModalOpen: v }),
   setExtractTasksModalOpen: (open, tab = "paste") =>
     open
       ? set({ isExtractTasksModalOpen: true, extractTasksModalTab: tab })
-      : set({ isExtractTasksModalOpen: false }),
+      : // Drop any consumed transcription seed so it is not shown again on the next open.
+        set({ isExtractTasksModalOpen: false, transcriptionSeedCandidates: null }),
   openTranscriptionModalWithCandidates: (candidates) =>
     set({
       transcriptionSeedCandidates: candidates,
       isExtractTasksModalOpen: true,
       extractTasksModalTab: "paste",
     }),
-  clearTranscriptionSeedCandidates: () => set({ transcriptionSeedCandidates: null }),
   setInviteModalOpen: (v) => set({ isInviteModalOpen: v }),
   setFilterOpen: (v) => set({ isFilterOpen: v }),
-  setNewIssueProjectSlug: (slug) => set({ newIssueProjectSlug: slug }),
-  openNewIssueModal: (projectSlug = null) =>
-    set({ isModalOpen: true, newIssueProjectSlug: projectSlug ?? null }),
-  closeNewIssueModal: () => set({ isModalOpen: false, newIssueProjectSlug: null }),
-  showToast: (message, type = "success") => set({ toast: { message, type } }),
+  openNewIssueModal: (projectSlug = null, initialStatus = null) =>
+    set({
+      isModalOpen: true,
+      newIssueProjectSlug: projectSlug ?? null,
+      newIssueInitialStatus: initialStatus ?? null,
+    }),
+  closeNewIssueModal: () =>
+    set({
+      isModalOpen: false,
+      newIssueProjectSlug: null,
+      newIssueInitialStatus: null,
+    }),
+  showToast: (message, type = "success") =>
+    set({ toast: { id: ++toastSeq, message, type } }),
   clearToast: () => set({ toast: null }),
 }));

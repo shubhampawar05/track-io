@@ -8,6 +8,7 @@ import { authenticate } from "./middleware/auth";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
 import { requireTrustedOrigin } from "./middleware/originCheck";
+import { securityHeaders } from "./middleware/securityHeaders";
 import { publicApiBase } from "./utils/uploadUrl";
 import { authRoutes } from "./routes/auth.routes";
 import { githubIntegrationRoutes } from "./routes/githubIntegration.routes";
@@ -22,6 +23,7 @@ import swaggerUi from "swagger-ui-express";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  app.use(securityHeaders(env.NODE_ENV === "production"));
   // Only trust X-Forwarded-For from known proxies, otherwise req.ip (rate limiting) is spoofable.
   app.set("trust proxy", env.TRUST_PROXY);
   app.use(
@@ -52,21 +54,24 @@ export function createApp() {
     ]),
   );
 
-  app.get("/api/openapi.json", (_req, res) => {
-    res.json(openApiSpec);
-  });
-  app.use(
-    "/api/docs",
-    swaggerUi.serve,
-    swaggerUi.setup(openApiSpec, {
-      explorer: true,
-      customSiteTitle: "Trackio API Docs",
-      swaggerOptions: {
-        displayRequestDuration: true,
-        filter: true,
-      },
-    }),
-  );
+  // API docs are public in development; in production only when ENABLE_API_DOCS=true.
+  if (env.ENABLE_API_DOCS) {
+    app.get("/api/openapi.json", (_req, res) => {
+      res.json(openApiSpec);
+    });
+    app.use(
+      "/api/docs",
+      swaggerUi.serve,
+      swaggerUi.setup(openApiSpec, {
+        explorer: true,
+        customSiteTitle: "Trackio API Docs",
+        swaggerOptions: {
+          displayRequestDuration: true,
+          filter: true,
+        },
+      }),
+    );
+  }
 
   app.use(authenticate);
   app.use(requestLogger);

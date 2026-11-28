@@ -1,14 +1,26 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+/** Baseline security headers. No script-src CSP: it would need nonces for Next's inline scripts. */
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  {
+    // Microphone stays allowed for this origin: meeting recording uses getUserMedia.
+    key: "Permissions-Policy",
+    value:
+      "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
+  },
+];
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(process.cwd()),
   },
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "api.dicebear.com", pathname: "/**" },
-    ],
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
 };
 

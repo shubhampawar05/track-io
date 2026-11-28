@@ -30,7 +30,7 @@ import {
   Redo2,
   Undo2,
 } from "lucide-react";
-import { apiOrigin, apiUploadFile } from "@/lib/api-client";
+import { apiBaseUrl, apiUploadFile } from "@/lib/api-client";
 import { useUIStore } from "@/stores/useUIStore";
 
 const purifyOpts = {
@@ -211,7 +211,7 @@ export const IssueDescriptionEditor = forwardRef<
       const r = await apiUploadFile(file);
       if (!r.success) return;
       const u = r.data.url;
-      const src = u.startsWith("http") ? u : `${apiOrigin()}${u.startsWith("/") ? u : `/${u}`}`;
+      const src = u.startsWith("http") ? u : `${apiBaseUrl()}${u.startsWith("/") ? u : `/${u}`}`;
       editor.chain().focus().setImage({ src }).run();
     };
     input.click();

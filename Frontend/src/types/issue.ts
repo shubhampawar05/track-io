@@ -192,6 +192,8 @@ export interface RecordingUploadResult {
 export type ToastType = "success" | "error";
 
 export interface ToastState {
+  /** Unique per `showToast` call so a replacement toast restarts its timer. */
+  id: number;
   message: string;
   type: ToastType;
 }

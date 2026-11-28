@@ -5,6 +5,7 @@ import { Membership } from "../models/Membership";
 import { Organization } from "../models/Organization";
 import { User } from "../models/User";
 import { LIMITS, assertMaxLength, isValidEmail } from "../utils/inputLimits";
+import { isDuplicateKeyError } from "../utils/mongoErrors";
 import { initialsFromName } from "../utils/initials";
 
 export type OrganizationSummary = { id: string; name: string; role: string };
@@ -88,7 +89,14 @@ export async function registerService(input: {
   if (exists) throw new HttpError(409, "Email already registered");
   const passwordHash = await bcrypt.hash(password, 10);
   const initials = initialsFromName(name);
-  const user = await User.create({ email, passwordHash, name, initials });
+  let user;
+  try {
+    user = await User.create({ email, passwordHash, name, initials });
+  } catch (err) {
+    // A concurrent registration with the same email won the unique index race.
+    if (isDuplicateKeyError(err)) throw new HttpError(409, "Email already registered");
+    throw err;
+  }
   const org = await Organization.create({
     name: `${name}'s Workspace`,
     ownerId: user._id,
@@ -121,13 +129,16 @@ export async function patchProfileService(
   return buildMePayload(uid, preferredOrgId);
 }
 
+/** bcrypt hash of a random string (cost 10, same as real hashes); compared when no user matches. */
+const DUMMY_PASSWORD_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.3e5M5o8Zw0k7X0bZb4pVRtE3m0kS";
+
 export async function loginService(input: { email: string; password: string }): Promise<AuthMePayload> {
   const email = input.email.toLowerCase().trim();
   const password = input.password;
   const user = await User.findOne({ email }).lean();
-  if (!user) throw new HttpError(401, "Invalid email or password");
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) throw new HttpError(401, "Invalid email or password");
+  // Always run one bcrypt comparison so response time does not reveal whether the email exists.
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !ok) throw new HttpError(401, "Invalid email or password");
   return buildMePayload(user._id);
 }
 

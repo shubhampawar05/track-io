@@ -10,7 +10,6 @@ import {
   Calendar as CalendarIcon,
   Tag,
   Trash2,
-  User,
 } from "lucide-react";
 import { IssueDetailGithub } from "@/components/issues/detail/IssueDetailGithub";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { apiJson } from "@/lib/api-client";
 import { useProjectDetail } from "@/hooks/useProjectDetail";
+import { useModalDialog } from "@/hooks/useModalDialog";
 import { cn } from "@/lib/utils";
 import { resolveIssueCloseHref } from "@/lib/issue-detail-from";
 import type {
@@ -94,6 +94,10 @@ export function IssueDetailSidePanel({
   const [patching, setPatching] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const closeDeleteConfirm = useCallback(() => {
+    if (!deleting) setDeleteConfirmOpen(false);
+  }, [deleting]);
+  const deleteDialogRef = useModalDialog(deleteConfirmOpen, closeDeleteConfirm);
   const [dueDateOpen, setDueDateOpen] = useState(false);
 
   const isOrgOwner = useMemo(() => {
@@ -108,6 +112,10 @@ export function IssueDetailSidePanel({
   const members = useMemo(
     () => projectData?.members ?? [],
     [projectData],
+  );
+  /** Only project members can be assigned, so "Assign to me" is offered to members only. */
+  const canAssignSelf = Boolean(
+    currentUserId && members.some((m) => m.id === currentUserId),
   );
 
   const patch = useCallback(
@@ -271,7 +279,7 @@ export function IssueDetailSidePanel({
                   sideOffset={6}
                   className={propertySelectContentClass}
                 >
-                  {currentUserId ? (
+                  {canAssignSelf && currentUserId ? (
                     <SelectItem
                       value={currentUserId}
                       className={propertySelectItemClass}
@@ -284,7 +292,7 @@ export function IssueDetailSidePanel({
                   </SelectItem>
                   {assigneeSelectMembers
                     .filter((m) =>
-                      currentUserId ? m.id !== currentUserId : true,
+                      canAssignSelf ? m.id !== currentUserId : true,
                     )
                     .map((m) => (
                       <SelectItem
@@ -584,9 +592,10 @@ export function IssueDetailSidePanel({
           <div
             className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
             role="presentation"
-            onClick={() => !deleting && setDeleteConfirmOpen(false)}
+            onClick={closeDeleteConfirm}
           >
             <div
+              ref={deleteDialogRef}
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-issue-confirm-title"

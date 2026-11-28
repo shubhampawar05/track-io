@@ -15,6 +15,7 @@ export default function MyIssuesPage() {
         error={isError ? error : null}
         onRetry={() => void refetch()}
         embedded
+        hideFilters
         issueNavFrom="list"
       />
     </div>

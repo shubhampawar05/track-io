@@ -19,6 +19,7 @@ export function DashboardOverlays() {
   const isModalOpen = useUIStore((s) => s.isModalOpen);
   const closeNewIssueModal = useUIStore((s) => s.closeNewIssueModal);
   const newIssueProjectSlug = useUIStore((s) => s.newIssueProjectSlug);
+  const newIssueInitialStatus = useUIStore((s) => s.newIssueInitialStatus);
   const isProjectModalOpen = useUIStore((s) => s.isProjectModalOpen);
   const isExtractTasksModalOpen = useUIStore((s) => s.isExtractTasksModalOpen);
   const extractTasksModalTab = useUIStore((s) => s.extractTasksModalTab);
@@ -40,6 +41,7 @@ export function DashboardOverlays() {
         isOpen={isModalOpen}
         onClose={closeNewIssueModal}
         projectSlug={newIssueProjectSlug}
+        initialStatus={newIssueInitialStatus}
         currentUserId={currentUserId}
         onAdd={async ({
           title,
@@ -120,12 +122,12 @@ export function DashboardOverlays() {
       <InviteMemberModal
         isOpen={isInviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
-        onInvite={async (email) => {
+        onInvite={async (email, role) => {
           const r = await apiJson<{ email: string }>(
             "/api/organizations/invites",
             {
               method: "POST",
-              body: { email },
+              body: { email, role },
             },
           );
           if (!r.success) return r.error;

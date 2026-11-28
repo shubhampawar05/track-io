@@ -1,17 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { AtSign, MessageSquare, Paperclip, Pencil, Send, Smile, X } from "lucide-react";
 import { CommentEmojiPicker } from "@/components/issues/detail/CommentEmojiPicker";
 import { issueDetailFocusWithinFieldShell } from "@/components/issues/detail/issueDetailPropertySelectStyles";
-import { apiJson, apiOrigin, apiUploadFile } from "@/lib/api-client";
+import { apiJson, apiBaseUrl, apiUploadFile } from "@/lib/api-client";
 import type { IssueAttachment, IssueComment, IssueDetail } from "@/types/issue";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useUIStore } from "@/stores/useUIStore";
+/**
+ * Local preview for a pending image upload. The object URL is created and revoked in a ref
+ * callback (React 19 ref cleanup), so it lives exactly as long as the <img> node and stays
+ * valid through StrictMode's mount/unmount/mount cycle.
+ */
+function BlobImagePreview({ file, className }: { file: File; className?: string }) {
+  const attachBlobUrl = useCallback(
+    (img: HTMLImageElement | null) => {
+      if (!img) return;
+      const url = URL.createObjectURL(file);
+      img.src = url;
+      return () => URL.revokeObjectURL(url);
+    },
+    [file],
+  );
+  // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+  return <img ref={attachBlobUrl} alt="" className={className} />;
+}
+
 function resolveHref(url: string) {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  return `${apiOrigin()}${url.startsWith("/") ? url : `/${url}`}`;
+  return `${apiBaseUrl()}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
 export function IssueDetailActivity({
@@ -92,28 +111,6 @@ export function IssueDetailActivity({
       block: "nearest",
     });
   };
-
-  const [previewState, setPreviewState] = useState<{
-    files: File[];
-    urls: (string | null)[];
-  }>({ files: [], urls: [] });
-  // Only use URLs created for the current file list (avoids a one-render mismatch after edits).
-  const pendingImagePreviewUrls =
-    previewState.files === pendingFiles ? previewState.urls : [];
-
-  // Object URLs are created and revoked in the same effect so StrictMode's mount/unmount/mount
-  // cycle never leaves the previews pointing at already-revoked URLs.
-  useEffect(() => {
-    const urls = pendingFiles.map((f) =>
-      f.type.startsWith("image/") ? URL.createObjectURL(f) : null,
-    );
-    setPreviewState({ files: pendingFiles, urls });
-    return () => {
-      urls.forEach((u) => {
-        if (u) URL.revokeObjectURL(u);
-      });
-    };
-  }, [pendingFiles]);
 
   const removePendingFile = (index: number) => {
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
@@ -336,17 +333,14 @@ export function IssueDetailActivity({
             {pendingFiles.length > 0 ? (
               <div className="flex flex-wrap gap-3 px-4 py-2.5">
                 {pendingFiles.map((f, index) => {
-                  const previewUrl = pendingImagePreviewUrls[index];
-                  if (previewUrl) {
+                  if (f.type.startsWith("image/")) {
                     return (
                       <div
                         key={`${f.name}-${f.size}-${index}`}
                         className="relative inline-flex max-w-full flex-col gap-1.5"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
-                        <img
-                          src={previewUrl}
-                          alt=""
+                        <BlobImagePreview
+                          file={f}
                           className="max-h-28 max-w-[200px] rounded-md border border-[var(--border)] object-contain"
                         />
                         <div className="flex max-w-[200px] items-center justify-between gap-2 text-[11px] text-[var(--text)]">

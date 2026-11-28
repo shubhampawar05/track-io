@@ -1,59 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { Layers } from "lucide-react";
 import { AuthResetPanel } from "@/components/auth/AuthResetPanel";
 
 export function AuthView({
-  variant = "full",
-  initialMode = "login",
+  variant,
   signupHref = "/signup",
   loginHref = "/",
   onLogin,
   onSignup,
   onRequestPasswordReset,
 }: {
-  variant?: "full" | "loginOnly" | "signupOnly";
-  initialMode?: "login" | "signup";
+  variant: "loginOnly" | "signupOnly";
   signupHref?: string;
   loginHref?: string;
   onLogin: (email: string, password: string) => Promise<void>;
   onSignup: (name: string, email: string, password: string) => Promise<void>;
   onRequestPasswordReset: (email: string) => Promise<string | null>;
 }) {
-  const initial =
-    variant === "loginOnly"
-      ? "login"
-      : variant === "signupOnly"
-        ? "signup"
-        : initialMode;
-  const [mode, setMode] = useState<"login" | "signup" | "reset">(initial);
-  /** Where to return after reset when `variant` is `full`. */
-  const [resetReturnMode, setResetReturnMode] = useState<"login" | "signup">(
-    "login",
-  );
+  const formMode = variant === "signupOnly" ? "signup" : "login";
+  const [mode, setMode] = useState<"login" | "signup" | "reset">(formMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const nameId = useId();
+  const emailId = useId();
+  const passwordId = useId();
 
   if (mode === "reset") {
-    const backTarget =
-      variant === "signupOnly"
-        ? "signup"
-        : variant === "loginOnly"
-          ? "login"
-          : resetReturnMode;
     const backLabel =
-      variant === "signupOnly" ||
-      (variant === "full" && resetReturnMode === "signup")
-        ? "Back to sign up"
-        : "Back to sign in";
+      variant === "signupOnly" ? "Back to sign up" : "Back to sign in";
     return (
       <AuthResetPanel
-        onBack={() => setMode(backTarget)}
+        onBack={() => setMode(formMode)}
         onRequestReset={onRequestPasswordReset}
         backLabel={backLabel}
       />
@@ -103,14 +86,26 @@ export function AuthView({
           </div>
         </div>
 
-        <div className="linear-card p-8 space-y-6 text-left">
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          className="linear-card p-8 space-y-6 text-left"
+        >
           {mode === "signup" && (
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+              <label
+                htmlFor={nameId}
+                className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+              >
                 Full Name
               </label>
               <input
+                id={nameId}
                 type="text"
+                autoComplete="name"
                 placeholder="John Doe"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -119,11 +114,16 @@ export function AuthView({
             </div>
           )}
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+            <label
+              htmlFor={emailId}
+              className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+            >
               Work Email
             </label>
             <input
+              id={emailId}
               type="email"
+              autoComplete="email"
               placeholder="name@company.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -132,16 +132,16 @@ export function AuthView({
           </div>
           <div className="space-y-2">
             <div className="flex justify-between items-center gap-2 min-h-[1.25rem]">
-              <label className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest">
+              <label
+                htmlFor={passwordId}
+                className="text-[10px] font-bold text-linear-text-muted uppercase tracking-widest"
+              >
                 Password
               </label>
               {mode === "login" && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setResetReturnMode(mode === "login" ? "login" : "signup");
-                    setMode("reset");
-                  }}
+                  onClick={() => setMode("reset")}
                   className="shrink-0 text-xs font-medium text-linear-accent hover:underline py-1 px-0.5 -mr-0.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-linear-accent/40"
                 >
                   Forgot password?
@@ -149,7 +149,9 @@ export function AuthView({
               )}
             </div>
             <input
+              id={passwordId}
               type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -161,14 +163,13 @@ export function AuthView({
           </div>
 
           <button
-            type="button"
+            type="submit"
             disabled={busy}
-            onClick={() => void submit()}
             className="w-full py-2.5 bg-linear-accent hover:brightness-110 rounded-md font-semibold transition-all duration-200 shadow-lg shadow-linear-accent/20 text-primary-foreground disabled:opacity-50"
           >
             {mode === "login" ? "Sign in" : "Create account"}
           </button>
-        </div>
+        </form>
 
         {variant === "loginOnly" ? (
           <p className="text-sm text-linear-text-muted">
@@ -180,7 +181,7 @@ export function AuthView({
               Sign up
             </Link>
           </p>
-        ) : variant === "signupOnly" ? (
+        ) : (
           <p className="text-sm text-linear-text-muted">
             Already have an account?{" "}
             <Link
@@ -189,19 +190,6 @@ export function AuthView({
             >
               Sign in
             </Link>
-          </p>
-        ) : (
-          <p className="text-sm text-linear-text-muted">
-            {mode === "login"
-              ? "Don't have an account?"
-              : "Already have an account?"}{" "}
-            <button
-              type="button"
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
-              className="text-linear-accent hover:underline"
-            >
-              {mode === "login" ? "Sign up" : "Sign in"}
-            </button>
           </p>
         )}
       </motion.div>

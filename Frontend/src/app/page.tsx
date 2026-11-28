@@ -23,8 +23,8 @@ function HomeLoginContent() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (user) router.replace("/issues/board");
-  }, [hydrated, user, router]);
+    if (user) router.replace(next ?? "/issues/board");
+  }, [hydrated, user, router, next]);
 
   if (!hydrated || user) {
     return <AppLoadingSkeleton />;

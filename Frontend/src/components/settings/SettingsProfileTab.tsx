@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Building2 } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useOrganizationStore } from "@/stores/useOrganizationStore";
@@ -18,12 +18,10 @@ export function SettingsProfileTab() {
   const organizationId = useOrganizationStore((s) => s.organizationId);
   const patchProfile = useAuthStore((s) => s.patchProfile);
   const showToast = useUIStore((s) => s.showToast);
-  const [name, setName] = useState("");
+  /** null until edited; until then the field shows the saved name. */
+  const [nameDraft, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (user?.name) setName(user.name);
-  }, [user?.name]);
+  const name = nameDraft ?? user?.name ?? "";
 
   if (!user) {
     return <p className="text-sm text-linear-text-muted">Sign in to manage your profile.</p>;

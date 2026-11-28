@@ -155,5 +155,8 @@ setUnauthorizedHandler(() => {
   if (!useAuthStore.getState().user) return;
   redirectingForExpiredSession = true;
   const here = `${window.location.pathname}${window.location.search}`;
-  window.location.assign(`/?next=${encodeURIComponent(here)}`);
+  // Intentionally a full document navigation (not router.push) so all in-memory state is dropped.
+  const signIn = new URL("/", window.location.origin);
+  signIn.searchParams.set("next", here);
+  window.location.assign(signIn.href);
 });
